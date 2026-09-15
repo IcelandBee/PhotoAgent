@@ -30,3 +30,12 @@ def test_framing_failure(frame, target):
     result = validate_sketch(target, meta, frame.path, AgentConfig(target_width=100, target_height=100))
     assert result.framing_error == pytest.approx(0.165)
     assert not result.passed
+
+
+def test_expanded_viewport_validation(frame, target):
+    data = target.model_dump()
+    data["framing"]["reference_viewport"] = [-0.2, 0, 1.2, 1]
+    target = type(target).model_validate(data)
+    result = validate_sketch(target, RenderMeta(rendered_viewport=(-0.2, 0, 1.2, 1)),
+                             frame.path, AgentConfig(target_width=100, target_height=100))
+    assert result.passed and result.framing_error == 0

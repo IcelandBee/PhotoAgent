@@ -39,7 +39,8 @@ def build_workflow(config: AgentConfig | None = None, *,
     config = config or AgentConfig()
     selector = selector if selector is not None else RandomReferenceSelector(config.random_seed)
     planner = planner if planner is not None else ManualCompositionPlanner()
-    renderer = renderer if renderer is not None else ViewportRenderer(config.target_width, config.target_height)
+    renderer = renderer if renderer is not None else ViewportRenderer(
+        config.target_width, config.target_height, fill_color=config.fill_color)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),

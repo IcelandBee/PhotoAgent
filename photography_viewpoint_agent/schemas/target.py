@@ -1,4 +1,4 @@
-from .base import NormalizedBox, Schema
+from .base import NormalizedBox, ViewportBox, Schema
 
 
 class SubjectTarget(Schema):
@@ -6,7 +6,7 @@ class SubjectTarget(Schema):
 
 
 class FramingTarget(Schema):
-    reference_viewport: NormalizedBox
+    reference_viewport: ViewportBox
 
 
 class TargetState(Schema):

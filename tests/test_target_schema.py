@@ -5,7 +5,7 @@ from photography_viewpoint_agent.config.settings import AgentConfig
 
 
 @pytest.mark.parametrize("field", ["subject", "framing"])
-@pytest.mark.parametrize("box", [[-0.1, 0, 1, 1], [0, 0, 1.1, 1], [0.5, 0, 0.5, 1],
+@pytest.mark.parametrize("box", [[0.5, 0, 0.5, 1],
     [0, 1, 1, 0], [0, 0, float("nan"), 1], [0, 0, float("inf"), 1], [0, 1]])
 def test_invalid_boxes(target, field, box):
     data = target.model_dump()
@@ -29,3 +29,27 @@ def test_missing_and_extra_fields(target):
 def test_invalid_config(config):
     with pytest.raises(ValidationError):
         AgentConfig(**config)
+
+
+@pytest.mark.parametrize("box", [[-0.1, 0, 1, 1], [0, 0, 1.1, 1],
+    [0, -0.2, 1, 1], [-0.2, 0.1, 0.9, 0.9], [-0.2, -0.2, 1.2, 1.2]])
+def test_viewport_expansion_does_not_relax_subject(target, box):
+    data = target.model_dump()
+    data["framing"]["reference_viewport"] = box
+    assert validate_plan(data).framing.reference_viewport == tuple(box)
+    data["subject"]["bbox"] = box
+    with pytest.raises(ValidationError):
+        validate_plan(data)
+
+
+@pytest.mark.parametrize("color", [[-1, 128, 128], [0, 0, 256], [0, 0], [1.5, 0, 0]])
+def test_invalid_fill_color(color):
+    with pytest.raises(ValidationError):
+        AgentConfig(fill_color=color)
+
+
+def test_viewport_safety_range(target):
+    data = target.model_dump()
+    data["framing"]["reference_viewport"] = [-3, 0, 1, 1]
+    with pytest.raises(ValidationError):
+        validate_plan(data)

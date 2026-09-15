@@ -73,3 +73,19 @@ def test_both_parallel_errors(tmp_path, target, monkeypatch):
     assert "select_reference_frame" in result["error"]
     assert "get_current_frame" in result["error"]
     assert "target_state" not in result
+
+
+def test_expansion_cli(tmp_path, target):
+    path = tmp_path / "input.avi"
+    video(path, 2)
+    data = target.model_dump()
+    data["framing"]["reference_viewport"] = [-0.25, -0.25, 1.25, 1.25]
+    manual = tmp_path / "target.json"
+    manual.write_text(json.dumps(data), encoding="utf-8")
+    output = tmp_path / "expanded"
+    assert main(["--video", str(path), "--target-state", str(manual), "--work-dir", str(output),
+                 "--target-width", "120", "--target-height", "120", "--fill-color", "50", "50", "50"]) == 0
+    result = json.loads((output / "result.json").read_text(encoding="utf-8"))
+    assert result["render_meta"]["padding"] == [20, 20, 20, 20]
+    assert result["validation"]["passed"]
+    assert np.all(cv2.imread(str(output / "target_sketch.jpg"))[5, 5] == 50)

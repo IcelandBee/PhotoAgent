@@ -54,6 +54,7 @@ macOS / Linux 使用 `.venv/bin/python` 替代 `.\.venv\Scripts\python`。可选
 | `--frame-sample-interval` | 30 | 每多少帧采样一次 |
 | `--random-seed` | 42 | 可复现的随机参考帧选择 |
 | `--target-width` / `--target-height` | 1280 / 720 | 草图像素尺寸 |
+| `--fill-color R G B` | 128 128 128 | 扩面区域的 RGB 填充颜色 |
 | `--subject-position-threshold` | 0.05 | 人物中心距离阈值 |
 | `--subject-scale-threshold` | 0.05 | 人物 bbox 高度差阈值 |
 | `--framing-threshold` | 0.03 | viewport 四边平均绝对误差阈值 |
@@ -70,19 +71,46 @@ macOS / Linux 使用 `.venv/bin/python` 替代 `.\.venv\Scripts\python`。可选
 }
 ```
 
-所有坐标均为 `[xmin, ymin, xmax, ymax]`，归一化到 `[0, 1]`，左上角为 `(0, 0)`。必须满足 `xmin < xmax`、`ymin < ymax`，拒绝缺失字段、额外字段及 NaN/Inf。
+所有坐标均为 `[xmin, ymin, xmax, ymax]`，左上角为 `(0, 0)`，原图右下角为 `(1, 1)`。必须满足 `xmin < xmax`、`ymin < ymax`，拒绝缺失字段、额外字段及 NaN/Inf。
 
-- `subject.bbox`：**最终 Target Canvas** 中的人物目标边界，唯一的人物位置/尺度真值。
-- `framing.reference_viewport`：**Reference Frame** 中希望映射到 Target Canvas 的场景区域。
+- `subject.bbox`：**最终 Target Canvas** 中的人物目标边界，唯一的人物位置/尺度真值，仍严格限制在 `[0, 1]`。
+- `framing.reference_viewport`：**Reference Frame** 坐标系中的虚拟视窗。独立的 `ViewportBox` 类型允许负数和大于 1 的值，使用宽松安全范围 `[-2, 3]`。无需额外 scale/outpaint 字段。
 
 ## 实现约定
 
 1. 顺序解码全部视频，但只把间隔采样帧和最后一帧写入磁盘；最后一帧不重复保存。内存中不积累整段视频，State 中只保留路径及 Pydantic 数据。
 2. `current_frame` 使用解码得到的最后一帧，无模糊或稳定性筛选。如果解码帧数少于视频声明帧数，报错，避免把提前中断的位置当成最后一帧。OpenCV 无法完全区分损坏视频与正常 EOF，特殊封装可能仍需后续 FFmpeg 支持。
 3. 随机选择使用独立的 `random.Random(seed)`，每次选择重新初始化；同一视频、采样设置和 seed 可复现。候选集合包含最后一帧。
-4. 基础 Renderer 对 viewport 做向外像素取整、裁剪，再直接 resize 到目标尺寸。宽高比不一致时会拉伸；V0.1 不做自动 letterbox 或额外裁剪。`RenderMeta` 记录实际取整后的 viewport，误差可能不是零。
+4. Renderer 对虚拟 viewport 做向外源像素取整，再用统一映射计算可见图像在固定画布中的位置。只裁剪/缩放原图与 viewport 的交集，画布其余部分填充 `fill_color`，不分配扩面大小的中间图像。完全不相交时输出纯色画布。宽高比不一致时会拉伸；不做自动 letterbox。`RenderMeta` 记录实际源像素取整后的 viewport，误差可能不是零；`padding` 为最终画布上的 `(left, top, right, bottom)` 像素边距。
 5. 人物暂不检测、移动或添加假人物；原参考帧中的人物随背景一起裁剪缩放。`rendered_subject_bbox=None`，人物误差为 `None`，并明确提示未启用。PASS 仅表示已实现的 framing 和文件可读性/尺寸检查通过，不表示完整人物构图已达成。
 6. Validator 根据 RenderMeta 计算：中心欧氏距离、bbox 高度绝对差、viewport 四边平均绝对误差。它是执行一致性检查，不是视觉美学或独立人物检测模型。
+
+## 虚拟视窗：放大与缩小
+
+原图归一化坐标 `(x, y)` 映射到目标画布：
+
+```text
+target_x = (x - xmin) / (xmax - xmin)
+target_y = (y - ymin) / (ymax - ymin)
+```
+
+原图与 viewport 的交集被缩放、粘贴到对应位置；超出原图的部分保留纯色。因此同一套逻辑支持 crop、zoom-in、zoom-out、平移、单侧/非对称扩面，以及 `[-0.2, 0.1, 0.9, 0.9]` 这种左侧扩面加上下裁剪的组合。
+
+为保持原有 crop 的像素行为，先将 viewport 边界向外取整到源像素；目标粘贴位置再四舍五入到画布像素，边界有最多半个目标像素的离散误差。`rendered_viewport` 描述源像素取整后的视窗，`padding` 描述实际目标边距，两者不重复表示同一层精度。JPEG 压缩可能使填充交界处颜色略有变化。视窗与原图完全不相交时整张画布填色，各方向 padding 由裁切后的投影边界计算，横向或纵向 padding 之和可等于整幅尺寸。
+
+三个可直接运行的示例（将 `$video` 改为你的文件路径）：
+
+```powershell
+$video = "D:\Data\videoagent\test_data\PhotoAgent\mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4"
+# crop / zoom-in：[0.35, 0.40, 0.95, 1.0]
+.\.venv\Scripts\python app.py --video $video --target-state examples/viewport_crop.json --work-dir workdir/viewport-crop
+# 中心扩面：[-0.25, -0.25, 1.25, 1.25]，原图宽高各占画布约 66.7%
+.\.venv\Scripts\python app.py --video $video --target-state examples/viewport_expansion.json --work-dir workdir/viewport-expansion
+# 单侧扩面：[-0.2, 0, 1, 1]，左侧填充
+.\.venv\Scripts\python app.py --video $video --target-state examples/viewport_left_expansion.json --work-dir workdir/viewport-left --fill-color 128 128 128
+```
+
+示例中的人物 bbox 是人工占位目标，Renderer 仍不独立操作人物。扩面表示几何缩小加纯色占位，不生成真实场景内容。
 
 ## 输出
 
@@ -144,4 +172,4 @@ if result.get("error"):
 .\.venv\Scripts\python -m pytest -q
 ```
 
-覆盖坐标边界、非法计划、配置校验、随机复现、API 返回值、实际裁剪像素、误差公式、不可读图片、最终帧采样、并行汇合、并行错误合并和 CLI 完整运行。测试自行创建本地视频，无需外部素材或服务。
+覆盖坐标边界、非法计划、配置校验、随机复现、API 返回值、实际裁剪像素、误差公式、不可读图片、最终帧采样、并行汇合、并行错误合并和 CLI 完整运行。扩面测试还覆盖四个单侧方向、中心扩面、混合 crop/expansion 的真实内容、完全不相交、可配置填色、原 crop 逐像素兼容、扩面校验和 CLI 配置传递。测试自行创建本地视频，无需外部素材或服务。

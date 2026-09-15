@@ -1,5 +1,8 @@
+from typing import Annotated
 from pydantic import Field
 from photography_viewpoint_agent.schemas.base import Schema
+
+ColorChannel = Annotated[int, Field(ge=0, le=255, strict=True)]
 
 
 class AgentConfig(Schema):
@@ -7,6 +10,7 @@ class AgentConfig(Schema):
     random_seed: int = 42
     target_width: int = Field(default=1280, gt=0, strict=True)
     target_height: int = Field(default=720, gt=0, strict=True)
+    fill_color: tuple[ColorChannel, ColorChannel, ColorChannel] = (128, 128, 128)
     subject_position_threshold: float = Field(default=0.05, ge=0)
     subject_scale_threshold: float = Field(default=0.05, ge=0)
     framing_threshold: float = Field(default=0.03, ge=0)

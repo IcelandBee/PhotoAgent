@@ -23,6 +23,8 @@ def main(argv=None) -> int:
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--target-width", type=int, default=1280)
     parser.add_argument("--target-height", type=int, default=720)
+    parser.add_argument("--fill-color", type=int, nargs=3, metavar=("R", "G", "B"),
+                        default=(128, 128, 128), help="Expansion fill color, RGB 0..255")
     parser.add_argument("--subject-position-threshold", type=float, default=0.05)
     parser.add_argument("--subject-scale-threshold", type=float, default=0.05)
     parser.add_argument("--framing-threshold", type=float, default=0.03)
