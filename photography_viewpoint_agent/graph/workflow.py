@@ -1,4 +1,4 @@
-from functools import partial, wraps
+from functools import partial
 import logging
 from langgraph.graph import END, START, StateGraph
 from photography_viewpoint_agent.config.settings import AgentConfig
@@ -8,7 +8,10 @@ from photography_viewpoint_agent.selectors.random_selector import RandomReferenc
 from photography_viewpoint_agent.planners.base import CompositionPlanner
 from photography_viewpoint_agent.planners.manual import ManualCompositionPlanner
 from photography_viewpoint_agent.renderer.base import SketchRenderer
-from photography_viewpoint_agent.renderer.viewport import ViewportRenderer
+from photography_viewpoint_agent.renderer.target_sketch import TargetSketchRenderer
+from photography_viewpoint_agent.subject_detection.base import SubjectDetector
+from photography_viewpoint_agent.subject_detection.yolo import YOLOSubjectDetector
+from photography_viewpoint_agent.nodes.detect_reference_subject import detect_reference_subject
 from photography_viewpoint_agent.nodes.load_video import load_video
 from photography_viewpoint_agent.nodes.extract_frames import extract_frames
 from photography_viewpoint_agent.nodes.select_reference import select_reference_frame
@@ -35,17 +38,21 @@ def guarded(name, function):
 def build_workflow(config: AgentConfig | None = None, *,
                    selector: ReferenceSelector | None = None,
                    planner: CompositionPlanner | None = None,
+                   detector: SubjectDetector | None = None,
                    renderer: SketchRenderer | None = None):
     config = config or AgentConfig()
     selector = selector if selector is not None else RandomReferenceSelector(config.random_seed)
     planner = planner if planner is not None else ManualCompositionPlanner()
-    renderer = renderer if renderer is not None else ViewportRenderer(
-        config.target_width, config.target_height, fill_color=config.fill_color)
+    detector = detector if detector is not None else YOLOSubjectDetector(
+        config.yolo_model, config.person_confidence, config.device)
+    renderer = renderer if renderer is not None else TargetSketchRenderer(
+        config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),
         "select_reference_frame": partial(select_reference_frame, selector=selector, config=config),
         "get_current_frame": partial(get_current_frame, config=config),
+        "detect_reference_subject": partial(detect_reference_subject, detector=detector, config=config),
         "composition_planner": partial(composition_planner, planner=planner),
         "render_target_sketch": partial(render_target_sketch, renderer=renderer, config=config),
         "validate_sketch": partial(validate_sketch, config=config),
@@ -57,7 +64,8 @@ def build_workflow(config: AgentConfig | None = None, *,
     graph.add_edge("load_video", "extract_frames")
     graph.add_edge("extract_frames", "select_reference_frame")
     graph.add_edge("extract_frames", "get_current_frame")
-    graph.add_edge(["select_reference_frame", "get_current_frame"], "composition_planner")
+    graph.add_edge("select_reference_frame", "detect_reference_subject")
+    graph.add_edge(["detect_reference_subject", "get_current_frame"], "composition_planner")
     graph.add_edge("composition_planner", "render_target_sketch")
     graph.add_edge("render_target_sketch", "validate_sketch")
     graph.add_edge("validate_sketch", END)

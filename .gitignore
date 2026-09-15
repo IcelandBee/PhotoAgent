@@ -1,4 +1,8 @@
 .venv/
+.venv*/
+*.pt
+*.onnx
+runs/
 __pycache__/
 .pytest_cache/
 *.egg-info/

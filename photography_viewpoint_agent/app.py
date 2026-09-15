@@ -15,7 +15,7 @@ def json_default(value):
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Photography Viewpoint Agent V0.1")
+    parser = argparse.ArgumentParser(description="Photography Viewpoint Agent V0.2")
     parser.add_argument("--video", required=True)
     parser.add_argument("--target-state", required=True)
     parser.add_argument("--work-dir", default="./workdir")
@@ -23,6 +23,10 @@ def main(argv=None) -> int:
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--target-width", type=int, default=1280)
     parser.add_argument("--target-height", type=int, default=720)
+    parser.add_argument("--yolo-model", default="yolo11n-seg.pt")
+    parser.add_argument("--person-confidence", type=float, default=0.4)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--debug", action="store_true", help="Save background and RGBA subject layers")
     parser.add_argument("--fill-color", type=int, nargs=3, metavar=("R", "G", "B"),
                         default=(128, 128, 128), help="Expansion fill color, RGB 0..255")
     parser.add_argument("--subject-position-threshold", type=float, default=0.05)

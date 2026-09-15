@@ -16,10 +16,12 @@ NormalizedBox = Annotated[tuple[float, float, float, float], AfterValidator(chec
 
 
 def check_viewport(box: tuple[float, float, float, float]):
-    if not all(math.isfinite(v) and -2 <= v <= 3 for v in box):
-        raise ValueError("Viewport coordinates must be finite and within [-2, 3]")
+    if not all(math.isfinite(v) for v in box):
+        raise ValueError("Viewport coordinates must be finite")
     if box[0] >= box[2] or box[1] >= box[3]:
         raise ValueError("Viewport must satisfy xmin < xmax and ymin < ymax")
+    if not math.isfinite(box[2] - box[0]) or not math.isfinite(box[3] - box[1]):
+        raise ValueError("Viewport dimensions must be finite")
     return box
 
 

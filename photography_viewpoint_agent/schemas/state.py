@@ -3,6 +3,7 @@ from .target import TargetState
 from .video import VideoMeta, FrameInfo
 from .rendering import RenderMeta
 from .validation import SketchValidation
+from .subject import SubjectObservation
 
 
 def merge_errors(left: str | None, right: str | None) -> str | None:
@@ -17,6 +18,7 @@ class AgentState(TypedDict, total=False):
     frames: list[FrameInfo]
     current_frame: FrameInfo
     reference_frame: FrameInfo
+    reference_subject: SubjectObservation
     target_state: TargetState
     target_sketch_path: str
     render_meta: RenderMeta

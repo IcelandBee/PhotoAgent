@@ -6,6 +6,20 @@ from photography_viewpoint_agent.config.settings import AgentConfig
 from photography_viewpoint_agent.graph.workflow import build_workflow
 from photography_viewpoint_agent.tools.video_utils import load_video_meta, extract_video_frames
 from photography_viewpoint_agent.app import main
+from PIL import Image
+from photography_viewpoint_agent.schemas.subject import SubjectObservation
+
+
+@pytest.fixture(autouse=True)
+def offline_detector(monkeypatch):
+    from photography_viewpoint_agent.subject_detection.yolo import YOLOSubjectDetector
+    def detect(self, frame, mask_path):
+        mask = np.zeros((frame.height, frame.width), dtype=np.uint8)
+        mask[10:30, 20:30] = 255
+        Image.fromarray(mask).save(mask_path)
+        return SubjectObservation(bbox=(20/frame.width,10/frame.height,30/frame.width,30/frame.height),
+                                   mask_path=str(mask_path),confidence=0.9)
+    monkeypatch.setattr(YOLOSubjectDetector, "detect", detect)
 
 
 def video(path, count):
@@ -44,6 +58,7 @@ def test_graph_join_and_cli(tmp_path, target):
     result = graph.invoke({"video_path": str(path)})
     assert result.get("error") is None
     assert result["validation"].passed and planner.calls == 1
+    assert "reference_subject" in result
     assert "validate_plan" not in graph.get_graph().nodes
     manual = tmp_path / "target.json"
     manual.write_text(target.model_dump_json(), encoding="utf-8")
@@ -86,6 +101,19 @@ def test_expansion_cli(tmp_path, target):
     assert main(["--video", str(path), "--target-state", str(manual), "--work-dir", str(output),
                  "--target-width", "120", "--target-height", "120", "--fill-color", "50", "50", "50"]) == 0
     result = json.loads((output / "result.json").read_text(encoding="utf-8"))
-    assert result["render_meta"]["padding"] == [20, 20, 20, 20]
+    assert result["render_meta"]["padding"] == [20, 30, 20, 30]
     assert result["validation"]["passed"]
     assert np.all(cv2.imread(str(output / "target_sketch.jpg"))[5, 5] == 50)
+
+
+def test_no_person_is_agent_error(tmp_path,target):
+    class EmptyDetector:
+        def detect(self,*args):
+            raise ValueError("YOLO-seg detected no person")
+    path = tmp_path/'input.avi'
+    video(path,2)
+    result = build_workflow(AgentConfig(work_dir=str(tmp_path/'run')),detector=EmptyDetector()).invoke(
+        {'video_path':str(path),'manual_target_state':target})
+    assert 'detect_reference_subject' in result['error']
+    assert 'no person' in result['error']
+    assert 'target_sketch_path' not in result

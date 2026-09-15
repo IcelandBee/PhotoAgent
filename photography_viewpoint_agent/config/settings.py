@@ -11,6 +11,10 @@ class AgentConfig(Schema):
     target_width: int = Field(default=1280, gt=0, strict=True)
     target_height: int = Field(default=720, gt=0, strict=True)
     fill_color: tuple[ColorChannel, ColorChannel, ColorChannel] = (128, 128, 128)
+    yolo_model: str = "yolo11n-seg.pt"
+    person_confidence: float = Field(default=0.4, gt=0, le=1)
+    device: str = "cpu"
+    debug: bool = False
     subject_position_threshold: float = Field(default=0.05, ge=0)
     subject_scale_threshold: float = Field(default=0.05, ge=0)
     framing_threshold: float = Field(default=0.03, ge=0)

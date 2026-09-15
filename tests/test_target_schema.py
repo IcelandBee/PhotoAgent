@@ -48,8 +48,10 @@ def test_invalid_fill_color(color):
         AgentConfig(fill_color=color)
 
 
-def test_viewport_safety_range(target):
+def test_large_finite_viewport_and_overflow(target):
     data = target.model_dump()
     data["framing"]["reference_viewport"] = [-3, 0, 1, 1]
+    assert validate_plan(data).framing.reference_viewport == (-3, 0, 1, 1)
+    data["framing"]["reference_viewport"] = [-1e308, 0, 1e308, 1]
     with pytest.raises(ValidationError):
         validate_plan(data)

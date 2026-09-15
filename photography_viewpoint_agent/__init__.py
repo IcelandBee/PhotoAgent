@@ -1,1 +1,1 @@
-"""Photography Viewpoint Agent V0.1."""
+"""Photography Viewpoint Agent V0.2: layered, aspect-preserving sketch rendering."""
