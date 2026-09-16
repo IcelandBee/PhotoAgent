@@ -102,7 +102,8 @@ def test_follow_fit_reproducible_and_default_canvas(tmp_path):
     with pytest.raises(ValueError,match='empty'):run_fit(ref,gt,tmp_path/'0',config)
 
 
-def test_reposition_fit_with_offline_detector_and_fallback(tmp_path):
+@pytest.mark.parametrize('manual_override',[False,True])
+def test_reposition_fit_with_offline_detector_and_fallback(tmp_path,manual_override):
     reference=textured_image()
     ImageDraw.Draw(reference).rectangle((70,25,89,74),fill=(240,0,0))
     ref=tmp_path/'reference.png'
@@ -117,12 +118,14 @@ def test_reposition_fit_with_offline_detector_and_fallback(tmp_path):
     _,meta=TargetSketchRenderer(160,96).render(frame_for(ref,reference.size),observation,target,gt)
     class Detector:
         def detect(self,frame,path):
+            if manual_override:
+                assert frame.frame_id != 'gt_native'
             if frame.frame_id=='gt_native':raise ValueError('GT unavailable')
             return observation
     config=FitConfig(population_size=4,num_rounds=1,samples_per_round=4,
-        gt_subject_bbox=meta.rendered_subject_bbox,preview_max_side=160)
+        gt_subject_bbox=meta.rendered_subject_bbox,preview_max_side=160,use_manual_gt_bbox=manual_override)
     log=run_fit(ref,gt,tmp_path/'out',config,detector=Detector(),progress=lambda _:None)
-    assert log['detections']['ground_truth']['source']=='manual_fallback'
+    assert log['detections']['ground_truth']['source']==('manual_override' if manual_override else 'manual_fallback')
     assert log['best_target_state']['subject']['mode']=='reposition'
     assert log['exported_sketch_loss']['subject']<0.02
 
@@ -134,3 +137,32 @@ def test_cli_config_override(tmp_path):
     config.write_text(json.dumps({'subject_mode':'reposition','population_size':1,'num_rounds':1,'samples_per_round':1}))
     assert main(['--reference',str(path),'--ground-truth',str(path),'--config',str(config),
                  '--mode','follow_reference','--output-dir',str(tmp_path/'out')])==0
+
+def test_manual_gt_override_requires_box():
+    with pytest.raises(ValidationError):
+        FitConfig(use_manual_gt_bbox=True)
+
+
+def test_reference_ignore_moves_with_viewport():
+    from experiments.fit_target_state.preview import PreparedRenderer
+    image = Image.new('RGB',(100,100))
+    mask = Image.new('L',(100,100))
+    ImageDraw.Draw(mask).rectangle((30,30,39,39),fill=255)
+    prepared = PreparedRenderer(image,None,(100,100),mask)
+    target = TargetState.model_validate({'subject':{'mode':'follow_reference'},
+        'framing':{'reference_viewport':[.25,.25,.75,.75]}})
+    _,_,excluded = prepared.render(target)
+    assert excluded[20,20] and not excluded[70,70]
+    assert np.array_equal(excluded,prepared.transformed_ignore(target,(100,100)))
+
+def test_color_loss_distinguishes_similar_brightness():
+    gt = Image.new('RGB',(80,60),(255,0,0))
+    candidate = Image.new('RGB',gt.size,(0,130,0))
+    ignore = Image.new('L',gt.size)
+    excluded = np.zeros((60,80),dtype=np.uint8)
+    gray = LossEvaluator(gt,None,ignore,FitConfig(subject_mode='follow_reference'))
+    color = LossEvaluator(gt,None,ignore,FitConfig(subject_mode='follow_reference',background_color_weight=1))
+    gray_loss,_ = gray.evaluate(candidate,None,excluded)
+    color_loss,_ = color.evaluate(candidate,None,excluded)
+    assert gray_loss['background'] < .01
+    assert color_loss['background'] > .4

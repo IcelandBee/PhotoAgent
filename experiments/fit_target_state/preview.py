@@ -10,8 +10,9 @@ from .images import bbox_mask
 
 class PreparedRenderer:
     """Cache constant layers; final export always uses the real TargetSketchRenderer."""
-    def __init__(self,source,observation,size):
+    def __init__(self,source,observation,size,reference_ignore=None):
         self.source,self.observation,self.size = source,observation,size
+        self.reference_ignore = reference_ignore
         self.viewport = ViewportRenderer(*size)
         self.background,self.layer = None,None
         if observation is not None:
@@ -23,7 +24,7 @@ class PreparedRenderer:
         viewport = target.framing.reference_viewport
         # Decode already matches aspect ratio, except preview dimensions can round by one pixel.
         canvas,meta = self.viewport.transform_background_by_viewport(self.source,viewport)
-        exclusion = np.zeros((self.size[1],self.size[0]),dtype=np.uint8)
+        exclusion = self.transformed_ignore(target,self.size)
         actual = None
         if self.observation is not None:
             natural = transform_bbox_by_viewport(self.observation.bbox,meta.rendered_viewport)
@@ -37,3 +38,10 @@ class PreparedRenderer:
                 canvas = composite(canvas,placed)
             exclusion |= bbox_mask(actual,self.size)
         return canvas,actual,exclusion
+
+    def transformed_ignore(self,target,size):
+        if self.reference_ignore is None:
+            return np.zeros((size[1],size[0]),dtype=np.uint8)
+        transformed,_ = ViewportRenderer(*size,fill_color=(255,255,255)).transform_background_by_viewport(
+            self.reference_ignore.convert('RGB'),target.framing.reference_viewport)
+        return (np.asarray(transformed).max(axis=2)>0).astype(np.uint8)*255

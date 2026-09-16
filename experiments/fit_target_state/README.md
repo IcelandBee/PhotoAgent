@@ -126,7 +126,7 @@ output_dir/
 
 实验测试包含物理比例、配置错误、ignore mask 的 1/255 语义、越界 bbox、GT letterbox、字幕忽略、GT 检测失败回退、搜索复现与改善、默认原图尺寸、实际 Renderer 导出、reposition 和 CLI 覆盖。无需在线权重即可运行这些测试。
 
-本轮尚未收到独立拍摄的真实前后图对，使用滑雪参考帧与**之前 Renderer 生成的已知变换图**作为 synthetic GT，额外添加模拟 UI 字幕及 ignore mask。CPU 自动检测两张图成功，输出 1920×1080。80 个全局样本、4 轮各 80 个局部样本，初始化 loss 约 0.05973，最优预览 0.00974，导出图复算约 0.00902。此结果仅验证管线和已知几何恢复，不代表真实摄影师移动数据上的泛化效果。
+初次 smoke test 尚未收到独立拍摄的真实前后图对，当时使用滑雪参考帧与**之前 Renderer 生成的已知变换图**作为 synthetic GT，额外添加模拟 UI 字幕及 ignore mask。CPU 自动检测两张图成功，输出 1920×1080。80 个全局样本、4 轮各 80 个局部样本，初始化 loss 约 0.05973，最优预览 0.00974，导出图复算约 0.00902。此结果仅验证管线和已知几何恢复，不代表真实摄影师移动数据上的泛化效果。
 
 本机复现命令（需保留 workdir 中的现有素材，输出目录换新）：
 
@@ -143,3 +143,14 @@ output_dir/
 5. 真实视差、透视、姿态变化和场景露出不能由本工具的 2D 缩放平移表达。不要把残差都归因于搜索失败；本轮不增加 homography、depth 或生成模型。
 
 文件职责：`config.py` 配置，`geometry.py` 参数化，`images.py` 输入/掩码/三联图，`preview.py` 缓存预览，`loss.py` 评分，`search.py` 搜索，`run.py` CLI 与导出，`tests/test_fit.py` 独立测试。
+
+## 真实 case 的检测与双侧 UI 屏蔽
+
+- `detection_image_size`：实验 YOLO 推理边长，默认 640；小人物可用 1280，CPU 可运行。
+- `person_confidence`：小人物可降低至 0.2，必须核查输出 reference_mask。
+- `gt_subject_bbox` 默认仅在检测失败时回退。检测虽成功却只覆盖上半身时，设置 `use_manual_gt_bbox: true` 显式使用人工完整框；日志记为 `manual_override`，不能称为全自动检测。
+- `--reference-ignore-mask`：reference 原始尺寸的非零忽略蒙版，随每个候选 viewport 变换后排除评分；GT 的 `--ignore-mask` 保持在 GT 坐标系。蒙版不修复或删除输出图的 UI。
+- JSON 的 `ignore_rects` 为归一化坐标。外部案例的像素坐标和嵌套 `search` 配置应先转换为本工具格式，保留原始文件。
+- 人工框、搜索边界、蒙版调整属于带监督拟合准备，不是独立泛化评测。主体的高度、底部中心约束不保证姿态与宽度一致。
+
+`background_color_weight` 默认为 0（原灰度/边缘评分），可提高 RGB 颜色差异权重以区分亮度相似的天空与树林。`min_background_fraction` 应在双侧 UI 蒙版启用时提高，例如 0.7，防止候选通过扩大屏蔽区获得虚假的低损失。不同 mask / loss 配置之间的总 loss 不可直接当作质量提升比例比较。

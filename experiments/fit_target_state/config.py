@@ -36,6 +36,8 @@ class FitConfig(SettingsModel):
     device: str = "cpu"
     yolo_model: str = "yolo11n-seg.pt"
     person_confidence: float = Field(default=0.4, gt=0, le=1)
+    detection_image_size: int = Field(default=640, ge=320)
+    use_manual_gt_bbox: bool = False
     population_size: PositiveInt = 200
     num_rounds: PositiveInt = 4
     samples_per_round: PositiveInt = 200
@@ -50,9 +52,12 @@ class FitConfig(SettingsModel):
     zoom_bounds: tuple[float, float] = (0.4, 3.0)
     center_bounds: tuple[float, float] = (-0.25, 1.25)
     min_background_fraction: float = Field(default=0.15, gt=0, le=1)
+    background_color_weight: float = Field(default=0.0, ge=0, le=1)
 
     @model_validator(mode="after")
     def consistent(self):
+        if self.use_manual_gt_bbox and self.gt_subject_bbox is None:
+            raise ValueError("use_manual_gt_bbox requires gt_subject_bbox")
         if (self.output_width is None) != (self.output_height is None):
             raise ValueError("Specify both output_width and output_height")
         if not 0 < self.zoom_bounds[0] < self.zoom_bounds[1]:

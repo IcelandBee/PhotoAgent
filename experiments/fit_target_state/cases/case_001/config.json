@@ -1,0 +1,36 @@
+{
+  "subject_mode": "reposition",
+  "seed": 42,
+  "device": "cpu",
+  "weights": {
+    "subject": 0.6,
+    "background": 0.4,
+    "global": 0.0
+  },
+  "num_rounds": 6,
+  "samples_per_round": 250,
+  "ignore_rects": [],
+  "detection_image_size": 1280,
+  "person_confidence": 0.2,
+  "use_manual_gt_bbox": true,
+  "gt_subject_bbox": [
+    0.7254237288135593,
+    0.5928753180661578,
+    0.888135593220339,
+    0.9414758269720102
+  ],
+  "zoom_bounds": [
+    3.5,
+    6.5
+  ],
+  "center_bounds": [
+    0,
+    1
+  ],
+  "population_size": 1500,
+  "min_background_fraction": 0.7,
+  "background_color_weight": 0.8,
+  "initial_guess": {
+    "zoom_scale": 5
+  }
+}

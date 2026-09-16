@@ -16,6 +16,7 @@ class LossEvaluator:
     def __init__(self,gt,gt_box,ignore,config):
         self.gt,self.gt_box,self.config = gt,gt_box,config
         self.gray,self.edges = gray_and_edges(gt)
+        self.rgb = np.asarray(gt).astype(np.float32)/255
         self.base_valid = ~np.asarray(ignore).astype(bool)
         # Erode validity so ignored captions cannot leak through Gaussian/Sobel kernels.
         self.base_valid = cv2.erode(self.base_valid.astype(np.uint8),np.ones((7,7),np.uint8)).astype(bool)
@@ -35,15 +36,18 @@ class LossEvaluator:
         valid = self.base_valid & ~gt_person & ~excluded
         fraction = float(valid.sum()/self.base_valid.sum())
         if fraction < self.config.min_background_fraction or valid.sum() < 16:
-            background_l1,edge,background = 1.0,1.0,1.0
+            background_l1,edge,background,color = 1.0,1.0,1.0,1.0
             penalty = 10.0  # Do not reward candidates that hide almost all comparison pixels.
         else:
             background_l1 = float(np.mean(np.abs(gray[valid]-self.gray[valid])))
             edge = float(np.mean(np.abs(edges[valid]-self.edges[valid])))
             background = 0.7*background_l1+0.3*edge
+            color = float(np.mean(np.abs(np.asarray(sketch).astype(np.float32)[valid]/255-self.rgb[valid])))
+            weight = self.config.background_color_weight
+            background = (1-weight)*background+weight*color
             penalty = 0.0
         global_loss = float(np.mean(np.abs(gray[self.base_valid]-self.gray[self.base_valid])))
         total = float(np.dot(self.weight_values,[subject,background,global_loss])+penalty)
-        return {"total":total,"subject":subject,"background":background,"background_l1":background_l1,
+        return {"total":total,"subject":subject,"background":background,"background_l1":background_l1,"background_color":color,
                 "background_edges":edge,"global":global_loss,"background_valid_fraction":fraction,
                 "insufficient_background_penalty":penalty},valid
