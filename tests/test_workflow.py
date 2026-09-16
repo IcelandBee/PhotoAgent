@@ -117,3 +117,49 @@ def test_no_person_is_agent_error(tmp_path,target):
     assert 'detect_reference_subject' in result['error']
     assert 'no person' in result['error']
     assert 'target_sketch_path' not in result
+
+
+def test_follow_route_never_calls_detector(tmp_path):
+    from photography_viewpoint_agent.schemas.target import TargetState
+    class FailingDetector:
+        calls = 0
+        def detect(self,*args):
+            self.calls += 1
+            raise RuntimeError('YOLO unavailable')
+    path = tmp_path/'input.avi'
+    video(path,2)
+    target = TargetState.model_validate({'subject':{'mode':'follow_reference'},
+        'framing':{'reference_viewport':[-0.2,-0.2,1.2,1.2]}})
+    detector = FailingDetector()
+    graph = build_workflow(AgentConfig(work_dir=str(tmp_path/'run')),detector=detector)
+    result = graph.invoke({'video_path':str(path),'manual_target_state':target})
+    assert result.get('error') is None and result['validation'].passed
+    assert detector.calls == 0 and 'reference_subject' not in result
+    assert not result['render_meta'].subject_transform_applied
+
+
+def test_follow_cli_with_nonexistent_model(tmp_path):
+    path = tmp_path/'input.avi'
+    video(path,2)
+    output = tmp_path/'follow'
+    assert main(['--video',str(path),'--target-state','examples/follow_reference.json',
+                 '--work-dir',str(output),'--yolo-model',str(tmp_path/'does-not-exist.pt')]) == 0
+    result = json.loads((output/'result.json').read_text(encoding='utf-8'))
+    assert result['validation']['passed'] and result['validation']['subject_scale_error'] is None
+    assert not (output/'subject_mask.png').exists()
+
+
+def test_mode_routing_uses_planner_output(tmp_path,target):
+    from photography_viewpoint_agent.schemas.target import TargetState
+    class FollowPlanner:
+        def plan(self,*args):
+            return TargetState.model_validate({'subject':{'mode':'follow_reference'},
+                'framing':{'reference_viewport':[0,0,1,1]}})
+    class NeverDetector:
+        def detect(self,*args):
+            pytest.fail('Routing must use planned mode, not manual reposition input')
+    path = tmp_path/'input.avi'
+    video(path,2)
+    result = build_workflow(AgentConfig(work_dir=str(tmp_path/'run')),planner=FollowPlanner(),detector=NeverDetector()).invoke(
+        {'video_path':str(path),'manual_target_state':target})
+    assert result['validation'].passed and 'reference_subject' not in result

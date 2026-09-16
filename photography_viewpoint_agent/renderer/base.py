@@ -7,5 +7,5 @@ from photography_viewpoint_agent.schemas.subject import SubjectObservation
 
 
 class SketchRenderer(Protocol):
-    def render(self, reference_frame: FrameInfo, reference_subject: SubjectObservation, target_state: TargetState,
+    def render(self, reference_frame: FrameInfo, reference_subject: SubjectObservation | None, target_state: TargetState,
                output_path: Path) -> tuple[str, RenderMeta]: ...

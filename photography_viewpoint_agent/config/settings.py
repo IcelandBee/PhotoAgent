@@ -15,6 +15,8 @@ class AgentConfig(Schema):
     person_confidence: float = Field(default=0.4, gt=0, le=1)
     device: str = "cpu"
     debug: bool = False
+    subject_noop_position_threshold: float = Field(default=0.001, ge=0)
+    subject_noop_scale_threshold: float = Field(default=0.001, ge=0)
     subject_position_threshold: float = Field(default=0.05, ge=0)
     subject_scale_threshold: float = Field(default=0.05, ge=0)
     framing_threshold: float = Field(default=0.03, ge=0)

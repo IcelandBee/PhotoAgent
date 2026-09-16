@@ -4,7 +4,16 @@ from photography_viewpoint_agent.config.settings import AgentConfig
 from photography_viewpoint_agent.schemas.target import TargetState
 from photography_viewpoint_agent.schemas.rendering import RenderMeta
 from photography_viewpoint_agent.schemas.validation import SketchValidation
-from photography_viewpoint_agent.tools.geometry import fit_viewport, contain_subject
+from photography_viewpoint_agent.tools.geometry import (
+    fit_viewport, contain_subject, transform_bbox_by_viewport, clip_bbox_to_canvas,
+    expected_subject_bbox, subject_is_noop,
+)
+
+
+def boxes_match(left, right, tolerance=1e-8):
+    if left is None or right is None:
+        return left is None and right is None
+    return all(abs(a-b) <= tolerance for a,b in zip(left,right))
 
 
 def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
@@ -21,7 +30,32 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
     if not passed:
         messages.append("Framing error exceeds threshold.")
     position = scale = None
-    if meta.rendered_subject_bbox is None:
+    if meta.subject_mode != target.subject.mode:
+        passed = False
+        messages.append("Rendered subject mode does not match target mode.")
+    if meta.requested_viewport is not None and not boxes_match(meta.requested_viewport, target.framing.reference_viewport):
+        passed = False
+        messages.append("Requested viewport metadata does not match target.")
+    if meta.source_subject_bbox is not None:
+        projected = transform_bbox_by_viewport(meta.source_subject_bbox, meta.rendered_viewport)
+        if not boxes_match(projected, meta.natural_subject_bbox):
+            passed = False
+            messages.append("Natural subject bbox does not match source-to-viewport projection.")
+    if target.subject.mode == "follow_reference":
+        if meta.subject_transform_applied:
+            passed = False
+            messages.append("follow_reference must not apply an independent subject transform.")
+        if meta.source_subject_bbox is None:
+            messages.append("Subject detection skipped; only framing and image integrity are validated.")
+            if meta.natural_subject_bbox is not None or meta.rendered_subject_bbox is not None:
+                passed = False
+                messages.append("Subject bbox metadata lacks a source observation.")
+        elif not boxes_match(clip_bbox_to_canvas(meta.natural_subject_bbox), meta.rendered_subject_bbox):
+            passed = False
+            messages.append("Follow-reference subject does not match its natural visible bbox.")
+        else:
+            messages.append("Subject follows the reference viewport without independent editing.")
+    elif meta.rendered_subject_bbox is None:
         passed = False
         messages.append("Subject rendering is missing.")
     else:
@@ -34,6 +68,17 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
             rw, rh = meta.reference_size
             sw, sh = (source[2]-source[0])*rw, (source[3]-source[1])*rh
             factor, _, _ = contain_subject((sw, sh), wanted, (config.target_width, config.target_height))
+            if not meta.subject_transform_applied:
+                expected = expected_subject_bbox(source, meta.reference_size, wanted,
+                                                  (config.target_width, config.target_height))
+                if not subject_is_noop(meta.natural_subject_bbox, expected,
+                                      config.subject_noop_position_threshold, config.subject_noop_scale_threshold):
+                    passed = False
+                    messages.append("Subject transform was skipped outside the no-op thresholds.")
+                if not boxes_match(clip_bbox_to_canvas(meta.natural_subject_bbox), actual):
+                    passed = False
+                    messages.append("No-op rendered bbox does not match natural geometry.")
+                messages.append("Independent subject editing skipped by no-op fast path.")
             expected_height = sh*factor/config.target_height
             if expected_height < wanted[3]-wanted[1]-1e-8:
                 messages.append("Subject height is limited by contain scaling within the target envelope.")

@@ -46,7 +46,9 @@ def build_workflow(config: AgentConfig | None = None, *,
     detector = detector if detector is not None else YOLOSubjectDetector(
         config.yolo_model, config.person_confidence, config.device)
     renderer = renderer if renderer is not None else TargetSketchRenderer(
-        config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug)
+        config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug,
+        subject_noop_position_threshold=config.subject_noop_position_threshold,
+        subject_noop_scale_threshold=config.subject_noop_scale_threshold)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),
@@ -64,9 +66,16 @@ def build_workflow(config: AgentConfig | None = None, *,
     graph.add_edge("load_video", "extract_frames")
     graph.add_edge("extract_frames", "select_reference_frame")
     graph.add_edge("extract_frames", "get_current_frame")
-    graph.add_edge("select_reference_frame", "detect_reference_subject")
-    graph.add_edge(["detect_reference_subject", "get_current_frame"], "composition_planner")
-    graph.add_edge("composition_planner", "render_target_sketch")
+    graph.add_edge(["select_reference_frame", "get_current_frame"], "composition_planner")
+
+    def route_subject(state: AgentState):
+        if state.get("error"):
+            return END
+        return "detect_reference_subject" if state["target_state"].subject.mode == "reposition" else "render_target_sketch"
+
+    graph.add_conditional_edges("composition_planner", route_subject,
+        {END: END, "detect_reference_subject": "detect_reference_subject", "render_target_sketch": "render_target_sketch"})
+    graph.add_edge("detect_reference_subject", "render_target_sketch")
     graph.add_edge("render_target_sketch", "validate_sketch")
     graph.add_edge("validate_sketch", END)
     return graph.compile()

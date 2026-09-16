@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 from photography_viewpoint_agent.tools.plan_validator import validate_plan
 from photography_viewpoint_agent.config.settings import AgentConfig
+from photography_viewpoint_agent.schemas.target import SubjectTarget
 
 
 @pytest.mark.parametrize("field", ["subject", "framing"])
@@ -55,3 +56,26 @@ def test_large_finite_viewport_and_overflow(target):
     data["framing"]["reference_viewport"] = [-1e308, 0, 1e308, 1]
     with pytest.raises(ValidationError):
         validate_plan(data)
+
+
+@pytest.mark.parametrize('subject', [
+    {'mode':'follow_reference','bbox':[0.1,0.2,0.5,0.9]},
+    {'mode':'reposition','bbox':None}, {'mode':'reposition'},
+    {'bbox':[0.1,0.2,0.5,0.9]}, {'mode':'unknown'},
+    {'mode':'reposition','bbox':[0,0,0,0]},
+])
+def test_invalid_subject_modes(subject):
+    with pytest.raises(ValidationError):
+        SubjectTarget.model_validate(subject)
+
+
+def test_valid_subject_modes():
+    assert SubjectTarget(mode='follow_reference').bbox is None
+    assert SubjectTarget(mode='follow_reference',bbox=None).bbox is None
+    assert SubjectTarget(mode='reposition',bbox=(0,0,1,1)).bbox == (0,0,1,1)
+
+
+@pytest.mark.parametrize('key',['subject_noop_position_threshold','subject_noop_scale_threshold'])
+def test_invalid_noop_thresholds(key):
+    with pytest.raises(ValidationError):
+        AgentConfig(**{key:-0.01})

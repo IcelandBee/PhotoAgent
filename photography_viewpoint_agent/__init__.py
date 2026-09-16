@@ -1,1 +1,1 @@
-"""Photography Viewpoint Agent V0.2: layered, aspect-preserving sketch rendering."""
+"""Photography Viewpoint Agent V0.3: explicit follow-reference and reposition modes."""

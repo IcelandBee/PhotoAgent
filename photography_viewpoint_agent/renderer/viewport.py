@@ -26,7 +26,7 @@ class ViewportRenderer:
             return max(0, min(limit, math.ceil(value - 0.5)))
         x0, y0 = edge(-left*scale, cw), edge(-top*scale, ch)
         x1, y1 = edge((width-left)*scale, cw), edge((height-top)*scale, ch)
-        meta = RenderMeta(rendered_viewport=fitted, reference_size=source.size,
+        meta = RenderMeta(requested_viewport=viewport, rendered_viewport=fitted, reference_size=source.size,
                           padding=(x0, y0, cw-x1, ch-y1))
         return canvas, meta
 

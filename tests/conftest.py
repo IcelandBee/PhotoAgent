@@ -6,7 +6,7 @@ from photography_viewpoint_agent.schemas.video import FrameInfo
 
 @pytest.fixture
 def target():
-    return TargetState.model_validate({"subject": {"bbox": [0.28, 0.15, 0.52, 0.9]},
+    return TargetState.model_validate({"subject": {"mode": "reposition", "bbox": [0.28, 0.15, 0.52, 0.9]},
         "framing": {"reference_viewport": [0.05, 0.02, 0.95, 0.98]}})
 
 

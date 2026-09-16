@@ -25,7 +25,7 @@ def person(tmp_path):
 
 
 def target_for(bbox, viewport=(0,0,1,1)):
-    return TargetState.model_validate({'subject':{'bbox':bbox},'framing':{'reference_viewport':viewport}})
+    return TargetState.model_validate({'subject':{'mode':'reposition','bbox':bbox},'framing':{'reference_viewport':viewport}})
 
 
 @pytest.mark.parametrize('envelope,actual', [
@@ -41,6 +41,13 @@ def test_subject_geometry(person, tmp_path, envelope, actual):
     target = target_for(envelope)
     path, meta = TargetSketchRenderer(200,120,debug=True).render(frame, observation,target,tmp_path/'result.png')
     assert meta.rendered_subject_bbox == pytest.approx(actual, abs=1/120)
+    if envelope == observation.bbox:
+        assert not meta.subject_transform_applied
+        assert not (tmp_path/'background_without_subject.jpg').exists()
+        np.testing.assert_array_equal(np.array(Image.open(path)),np.array(Image.open(frame.path)))
+        assert validate_sketch(target,meta,path,AgentConfig(target_width=200,target_height=120)).passed
+        return
+    assert meta.subject_transform_applied
     layer = Image.open(tmp_path/'placed_subject.png')
     box = layer.getchannel('A').getbbox()
     assert abs((box[2]-box[0])*3-(box[3]-box[1])) <= 3
@@ -76,7 +83,7 @@ def test_invalid_masks(person,tmp_path,kind):
     else:
         observation = observation.model_copy(update={'bbox':(0,0,1,1)})
     with pytest.raises(ValueError):
-        TargetSketchRenderer(200,120).render(frame,observation,target_for((0,0,1,1)),tmp_path/'bad.png')
+        TargetSketchRenderer(200,120).render(frame,observation,target_for((0.1,0.1,0.3,0.8)),tmp_path/'bad.png')
 
 
 def test_no_background_pixels():
