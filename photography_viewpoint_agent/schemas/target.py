@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from .base import NormalizedBox, ViewportBox, Schema
 
 SubjectMode = Literal["follow_reference", "reposition"]
@@ -23,6 +23,26 @@ class FramingTarget(Schema):
     reference_viewport: ViewportBox
 
 
+class ViewpointTarget(Schema):
+    mode: Literal['none', 'rotation'] = 'none'
+    yaw_deg: float = Field(default=0, ge=-15, le=15)
+    pitch_deg: float = Field(default=0, ge=-15, le=15)
+    roll_deg: float = Field(default=0, ge=-15, le=15)
+    horizontal_fov_deg: float = Field(default=60, ge=10, le=150)
+    border_mode: Literal['constant', 'replicate'] = 'constant'
+
+    @model_validator(mode='after')
+    def no_ignored_angles(self):
+        if self.mode == 'none' and any((self.yaw_deg, self.pitch_deg, self.roll_deg)):
+            raise ValueError('Nonzero angles require viewpoint.mode=rotation')
+        return self
+
+    @property
+    def active(self):
+        return self.mode == 'rotation' and any((self.yaw_deg, self.pitch_deg, self.roll_deg))
+
+
 class TargetState(Schema):
     subject: SubjectTarget
     framing: FramingTarget
+    viewpoint: ViewpointTarget = Field(default_factory=ViewpointTarget)

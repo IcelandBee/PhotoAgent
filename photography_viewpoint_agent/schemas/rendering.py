@@ -7,6 +7,7 @@ PixelCount = Annotated[int, Field(ge=0, strict=True)]
 
 
 class RenderMeta(Schema):
+    viewpoint_warp: dict | None = None
     rendered_viewport: ViewportBox
     requested_viewport: ViewportBox | None = None
     subject_mode: SubjectMode = "follow_reference"

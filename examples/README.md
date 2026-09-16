@@ -53,3 +53,10 @@ $case = "31_combined__frame_zoom_out__subject_right_smaller"
 保留 `create_demo_video.py`，可生成不依赖下载的合成视频，适合测试 `frame_only`。它画出的简化人物不保证被 YOLO 识别，因此人物编辑示例请使用真实视频。
 
 旧 `manual_target_state.json`、`follow_reference.json`、`reposition.json`、`viewport_*.json`、`subject_move_left.json`、`subject_zoom_out_right.json` 已由上表案例替代并删除。无需维护多份名字含糊或效果重复的参数文件。
+
+## 小视角旋转
+
+- [40_viewpoint_only__yaw_right_5deg.json](40_viewpoint_only__yaw_right_5deg.json)：相机右转5°，整图内容向左，人物随图旋转。
+- [41_combined__rotation__zoom_in__subject_right.json](41_combined__rotation__zoom_in__subject_right.json)：yaw +5°、pitch -3°，再裁剪放大，人物独立放到右侧。bbox 为绝对目标位置，不使用前述滑雪人物的相对大小校准。
+
+旋转先于 viewport；此时 viewport 坐标相对于同尺寸的旋转后画布。详细方向与静态图片 CLI 见 [旋转实验说明](../experiments/viewpoint_rotation/README.md)。
