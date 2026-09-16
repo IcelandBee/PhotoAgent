@@ -142,7 +142,7 @@ def test_follow_cli_with_nonexistent_model(tmp_path):
     path = tmp_path/'input.avi'
     video(path,2)
     output = tmp_path/'follow'
-    assert main(['--video',str(path),'--target-state','examples/follow_reference.json',
+    assert main(['--video',str(path),'--target-state','examples/11_frame_only__zoom_out_center.json',
                  '--work-dir',str(output),'--yolo-model',str(tmp_path/'does-not-exist.pt')]) == 0
     result = json.loads((output/'result.json').read_text(encoding='utf-8'))
     assert result['validation']['passed'] and result['validation']['subject_scale_error'] is None

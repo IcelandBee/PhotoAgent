@@ -44,13 +44,13 @@ CPU 默认可运行；服务器使用 CUDA 时，先按 [PyTorch 官方安装说
 **整图跟随，不独立编辑人物：**
 
 ```powershell
-.\.venv311\Scripts\python app.py --video "D:\Data\videoagent\test_data\PhotoAgent\mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4" --target-state examples/follow_reference.json --work-dir workdir/my-follow-demo --device cpu --debug
+.\.venv311\Scripts\python app.py --video "D:\Data\videoagent\test_data\PhotoAgent\mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4" --target-state examples/11_frame_only__zoom_out_center.json --work-dir workdir/my-follow-demo --device cpu --debug
 ```
 
-**同样的背景视窗，同时独立重新布局人物：**
+**同样的背景视窗，同时人物右移并缩小：**
 
 ```powershell
-.\.venv311\Scripts\python app.py --video "D:\Data\videoagent\test_data\PhotoAgent\mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4" --target-state examples/reposition.json --work-dir workdir/my-reposition-demo --device cpu --debug
+.\.venv311\Scripts\python app.py --video "D:\Data\videoagent\test_data\PhotoAgent\mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4" --target-state examples/31_combined__frame_zoom_out__subject_right_smaller.json --work-dir workdir/my-reposition-demo --device cpu --debug
 ```
 
 `--work-dir` 必须为空或不存在，每次选择新目录，避免旧成功产物与失败运行混淆。退出码：`0` PASS，`1` 输入/检测/执行错误，`2` 校验 FAIL。
@@ -158,7 +158,7 @@ target_x = (x-xmin)/(xmax-xmin)
 target_y = (y-ymin)/(ymax-ymin)
 ```
 
-`manual_target_state.json` 和 `viewport_crop.json` / `viewport_expansion.json` / `viewport_left_expansion.json` 已改为 follow-reference；`subject_move_left.json` / `subject_zoom_out_right.json` 已显式添加 reposition。新增 `follow_reference.json`、`reposition.json` 用相同 viewport 展示两种行为。
+示例已按 `00_baseline`、`10–14_frame_only`、`20–23_subject_only`、`30–31_combined` 四组整理，参见 [examples 中文索引](examples/README.md)。文件名直接说明编辑对象和操作；旧的重复示例已删除。人物单独编辑案例基于当前滑雪视频的第 30 帧校准，换视频后请调整 bbox。
 
 ## Validator
 
@@ -208,7 +208,7 @@ workdir/my-subject-demo/
 | `tools/sketch_validator.py` | bottom-center、contain scale、比例与 framing 校验 |
 | `config/settings.py`、`app.py` | 模型、设备、阈值、debug 配置和 CLI |
 | `requirements*.txt`、`pyproject.toml`、`.gitignore` | Python 3.11 依赖与权重排除 |
-| `tests/`、`examples/subject_*.json` | 离线自动测试与真实演示参数 |
+| `tests/`、`examples/*.json` | 离线自动测试与真实演示参数 |
 
 `build_workflow(config, selector=..., planner=..., detector=..., renderer=...)` 使用 Protocol 注入组件，不改变 Selector/Planner 的职责。Renderer 接口仍为 `render(reference_frame, reference_subject, target_state, output_path)`，其中 reference_subject 在 follow-reference 下可以为 None。配置和模型实例不进入 State；每次 Python 调用使用独立 work_dir 和全新输入 State。
 

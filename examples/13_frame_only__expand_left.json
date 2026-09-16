@@ -1,0 +1,14 @@
+{
+  "subject": {
+    "mode": "follow_reference",
+    "bbox": null
+  },
+  "framing": {
+    "reference_viewport": [
+      -0.2,
+      0,
+      1,
+      1
+    ]
+  }
+}
