@@ -60,3 +60,16 @@ $case = "31_combined__frame_zoom_out__subject_right_smaller"
 - [41_combined__rotation__zoom_in__subject_right.json](41_combined__rotation__zoom_in__subject_right.json)：yaw +5°、pitch -3°，再裁剪放大，人物独立放到右侧。bbox 为绝对目标位置，不使用前述滑雪人物的相对大小校准。
 
 旋转先于 viewport；此时 viewport 坐标相对于同尺寸的旋转后画布。详细方向与静态图片 CLI 见 [旋转实验说明](../experiments/viewpoint_rotation/README.md)。
+
+## 深度机位编辑
+
+| 案例 | 作用 |
+| --- | --- |
+| [50_depth3d__identity.json](50_depth3d__identity.json) | 深度backend零运动，对照原图 |
+| [51_depth3d__translate_right_small.json](51_depth3d__translate_right_small.json) | 相机右移0.03，近景向左移动更多 |
+| [52_depth3d__translate_forward_small.json](52_depth3d__translate_forward_small.json) | 相机前移0.03 |
+| [53_depth3d__translate_backward_small.json](53_depth3d__translate_backward_small.json) | 相机后移0.03 |
+| [54_combined__depth3d__zoom_in__subject_right.json](54_combined__depth3d__zoom_in__subject_right.json) | 3D旋转平移、显式裁剪、独立人物右置 |
+| [55_depth3d__translate_up_small.json](55_depth3d__translate_up_small.json) | 相机上移0.03，画面向下 |
+
+这些平移量以深度中位数1为单位，不是米，也不是画面宽高比例。全部通过 app.py 的正式工作流；运行方法和深度复用说明见 [depth_3d文档](../docs/depth3d.md)。旧00和40分别复用为none及rotation基准。

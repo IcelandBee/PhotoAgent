@@ -4,6 +4,7 @@ from photography_viewpoint_agent.config.settings import AgentConfig
 from photography_viewpoint_agent.schemas.target import TargetState
 from photography_viewpoint_agent.schemas.rendering import RenderMeta
 from photography_viewpoint_agent.schemas.validation import SketchValidation
+from photography_viewpoint_agent.renderer.viewpoint_warp import rotation_homography, warp_bbox
 from photography_viewpoint_agent.tools.geometry import (
     fit_viewport, contain_subject, transform_bbox_by_viewport, clip_bbox_to_canvas,
     expected_subject_bbox, subject_is_noop,
@@ -27,6 +28,17 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
             messages.append("Viewport was aspect-fitted around its center; framing error uses the fitted viewport.")
     framing = sum(abs(a - b) for a, b in zip(expected_viewport, meta.rendered_viewport)) / 4
     passed = framing <= config.framing_threshold
+    viewpoint = target.viewpoint
+    if viewpoint.mode == 'depth_3d' or viewpoint.active:
+        if meta.viewpoint_warp is None or meta.viewpoint_warp.get('parameters') != viewpoint.model_dump():
+            passed = False
+            messages.append('Viewpoint metadata does not match requested transform.')
+        if viewpoint.mode == 'depth_3d':
+            warp = meta.viewpoint_warp or {}
+            if warp.get('backend') != 'depth_3d' or not 0 < warp.get('valid_fraction',0) <= 1:
+                passed = False
+                messages.append('Missing depth_3d coverage/backend metadata.')
+            messages.append('Depth coverage is diagnostic; PASS validates geometry plumbing, not novel-view realism.')
     if not passed:
         messages.append("Framing error exceeds threshold.")
     position = scale = None
@@ -37,7 +49,15 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
         passed = False
         messages.append("Requested viewport metadata does not match target.")
     if meta.source_subject_bbox is not None:
-        projected = transform_bbox_by_viewport(meta.source_subject_bbox, meta.rendered_viewport)
+        source_box = meta.source_subject_bbox
+        if viewpoint.mode == 'depth_3d':
+            source_box = (meta.viewpoint_warp or {}).get('projected_subject_bbox')
+            if target.subject.mode == 'reposition':
+                messages.append('Natural subject projection omitted: background depth repaired; subject rendered independently.')
+        elif viewpoint.active and meta.reference_size is not None:
+            h,_,_ = rotation_homography(meta.reference_size,viewpoint)
+            source_box = warp_bbox(source_box,meta.reference_size,h)
+        projected = transform_bbox_by_viewport(source_box, meta.rendered_viewport) if source_box else None
         if not boxes_match(projected, meta.natural_subject_bbox):
             passed = False
             messages.append("Natural subject bbox does not match source-to-viewport projection.")

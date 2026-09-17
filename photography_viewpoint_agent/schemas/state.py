@@ -4,6 +4,7 @@ from .video import VideoMeta, FrameInfo
 from .rendering import RenderMeta
 from .validation import SketchValidation
 from .subject import SubjectObservation
+from .depth import DepthObservation
 
 
 def merge_errors(left: str | None, right: str | None) -> str | None:
@@ -19,6 +20,7 @@ class AgentState(TypedDict, total=False):
     current_frame: FrameInfo
     reference_frame: FrameInfo
     reference_subject: SubjectObservation
+    reference_depth: DepthObservation
     target_state: TargetState
     target_sketch_path: str
     render_meta: RenderMeta

@@ -14,6 +14,11 @@ class AgentConfig(Schema):
     yolo_model: str = "yolo11n-seg.pt"
     person_confidence: float = Field(default=0.4, gt=0, le=1)
     device: str = "cpu"
+    depth_model: str = 'depth-anything/Depth-Anything-V2-Small-hf'
+    depth_path: str | None = None
+    depth_device: str = 'cpu'
+    depth_debug: bool = False
+    splat_radius: int = Field(default=1, ge=1, le=3, strict=True)
     debug: bool = False
     subject_noop_position_threshold: float = Field(default=0.001, ge=0)
     subject_noop_scale_threshold: float = Field(default=0.001, ge=0)

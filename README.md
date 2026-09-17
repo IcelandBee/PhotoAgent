@@ -225,3 +225,9 @@ V0.3 新增 `tests/test_subject_modes.py` 及 Schema/Workflow 测试：严格 mo
 CPU 真实测试采用用户的滑雪视频：follow-reference、正常 reposition、reposition no-op 均 PASS；no-op 与同 viewport 的 follow-reference 输出 JPEG **逐字节一致**。跟随模式使用不存在的模型路径仍成功，无 mask/inpaint 产物。**独立编辑的局限仍然存在**：person 类 mask 不包含滑雪板，滑雪板留在原处；分割边缘可见白边，传统 inpaint 留下涂抹痕迹。跟随/no-op 路径不引入这些编辑痕迹。人物可按目标参数落在灰色占位区，系统暂不检查地面接触关系。
 
 当前不实现器材关联、SAM、高级 matting、生成式补图、阴影/反射/遮挡重建、姿态修改、多人物规划、3D、实时闭环或美学优化。
+
+## 基于深度的小范围3D机位编辑
+
+正式 workflow 现支持 `viewpoint.mode=depth_3d`，保留原 none / rotation。
+新增案例 `50_depth3d__identity`、`51_depth3d__translate_right_small`、`52_depth3d__translate_forward_small`、`53_depth3d__translate_backward_small`、`54_combined__depth3d__zoom_in__subject_right`、`55_depth3d__translate_up_small`。
+完整运行方法、CPU深度模型、坐标方向与验收结果见 [depth_3d说明](docs/depth3d.md)。
