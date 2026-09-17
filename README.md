@@ -1,5 +1,77 @@
 # Photography Viewpoint Agent V0.3
 
+## Target Generator → Guidance 集成
+
+PhotoAgent 负责 **Target Generation**，输出 Reference Frame、TargetState、Target Sketch、RenderMeta；独立的 `video_guide` 负责 **Guidance**，结合 Current Frame 输出 navigation / composition / reached / uncertain 及真实拍摄动作。
+
+**crop-based composition generation has been replaced by PhotoAgent Target Sketch.** 下游不再生成或定位 crop composition，也不把扩面、人物重排或深度视点变换简化为裁图。
+
+两个 repository 保持独立，使用同一个 Python 3.11 环境做 editable 安装：
+
+```powershell
+python -m pip install -e D:\Project\PhotoAgent
+python -m pip install -e "D:\Project\video-stream-based-photography-recomendation-main[web,test]"
+```
+
+已有核心依赖约束兼容；集成不需要升级 LangGraph、Pydantic、NumPy、OpenCV 或 Pillow。下游保持 dataclass/TypedDict 风格，上游继续使用 Pydantic。单独使用上游不要求安装下游；集成测试在未安装下游时会明确 skip。
+
+```python
+from photography_viewpoint_agent.config.settings import AgentConfig
+from photography_viewpoint_agent.graph.integrated_workflow import build_integrated_workflow
+
+workflow = build_integrated_workflow(AgentConfig(target_width=1280, target_height=720))
+result = workflow.invoke({
+    "video_path": "sample.mp4",
+    "manual_target_state": {
+        "subject": {"mode": "follow_reference"},
+        "framing": {"reference_viewport": [-0.1, -0.1, 1.1, 1.1]},
+    },
+    "session_directory": "workdir/session-001",
+    "session_id": "session-001", "step_id": 1,
+})
+print(result["reference_frame"], result["target_sketch"], result["target_state"])
+print(result["guidance"])
+```
+
+默认 LocalBackend 离线运行，对复杂构图会返回 uncertain，不虚构实拍动作。可注入 `backend=VLMBackend(...)` 使用模型；模型接收三张图、完整目标元数据和原视频。首次 `reposition` / depth 模式仍受上游检测器、深度模型和 GPU 配置要求约束。
+
+```text
+START → generate_target（原 PhotoAgent Graph）
+      → build_handoff（TargetPackage → GuideGraphInput）
+      → guide_once（独立 Guidance Graph）→ END
+
+Guidance: validate_input → prepare_inputs → analyze_alignment → persist_result
+```
+
+`TargetPackage` 位于 `schemas/handoff.py`：video_path、reference_frame/current_frame（FrameInfo）、target_state（TargetState）、target_sketch_path、render_meta（RenderMeta）。不包含两个内部 State 的合并字段。上游执行错误或 SketchValidation 失败会阻止 handoff。
+
+后续帧只调用 Guidance；不要重新调用集成父图：
+
+```python
+from video_guide.core import build_guide_graph
+from photography_viewpoint_agent.schemas.handoff import TargetPackage
+from photography_viewpoint_agent.integration import to_guide_input
+
+package = TargetPackage.model_validate(result["target_package"])
+next_result = build_guide_graph().invoke(to_guide_input(
+    package, "workdir/session-001", current_frame="new_current.png",
+    session_id="session-001", step_id=2,
+))
+```
+
+会话目录：`generation/` 保存上游帧和 debug 产物；`target/` 固定保存 reference_frame、target_sketch、target_state.json、render_meta.json；`guidance/step_000001/` 等目录只保存本步 current_frame 与结果/manifest。视频按原路径引用，需保持源文件稳定可读。重复 step 拒绝覆盖，省略 step_id 自动分配。集成父图要求新的 generation 目录；检查点恢复使用 `invoke(None, config)`。
+
+离线最小端到端 demo（自动生成小视频，不下载模型、不需要 Key）：
+
+```powershell
+.\.venv311\Scripts\python tools/run_integrated_demo.py --output workdir/integrated-demo
+.\.venv311\Scripts\python -m pytest -q
+```
+
+Demo 输出 `integrated_result.json`；再次运行请使用新的 output 目录。下游测试在其项目根目录运行 `python -m pytest -q`。本版未实现摄像头循环或 target refresh policy。
+
+---
+
 Python + LangGraph 本地视频构图原型。`reference_viewport` 控制整体取景，`subject.mode` 明确选择整图跟随或人物独立编辑。只有 `reposition` 使用 YOLO-seg 和目标 `subject.bbox`。
 
 **Composition Planner 仍使用人工输入 TargetState，用于验证 Workflow 和 Target Sketch Rendering Pipeline。** 不需要 VLM API 或 Key；只有首次运行 `reposition` 才需要下载 YOLO 分割权重。`follow_reference` 不加载模型。
