@@ -1,0 +1,83 @@
+{
+  "source_page": "https://cvg.cit.tum.de/data/datasets/rgbd-dataset/download",
+  "files": [
+    {
+      "file": "rgbd_dataset_freiburg1_room-rgb.avi",
+      "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_room-rgb.avi",
+      "bytes": 13765996,
+      "sha256": "904f2c932e82e1aa0acf0682800993803b5089b25e424421074ef4f27df7721a",
+      "width": 640,
+      "height": 480,
+      "fps": 30.0,
+      "frames": 1362,
+      "duration_seconds": 45.4,
+      "all_frames_decoded": true,
+      "smoke_tests": [
+        {
+          "force_current": false,
+          "mode": "navigation",
+          "crop_generated": false,
+          "output_directory": "outputs\\0c349614adb4427d95f94c98f8f6e231\\run"
+        },
+        {
+          "force_current": true,
+          "mode": "composition",
+          "crop_generated": true,
+          "output_directory": "outputs\\054f5bf50b5446c28c585e0aa2e16041\\run"
+        }
+      ]
+    },
+    {
+      "file": "rgbd_dataset_freiburg1_rpy-rgb.avi",
+      "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_rpy-rgb.avi",
+      "bytes": 7411056,
+      "sha256": "23195e68b589a567101696bd7484dcde41bf58ce25165a326597bc1cf080c789",
+      "width": 640,
+      "height": 480,
+      "fps": 30.0,
+      "frames": 723,
+      "duration_seconds": 24.1,
+      "all_frames_decoded": true,
+      "smoke_tests": [
+        {
+          "force_current": false,
+          "mode": "navigation",
+          "crop_generated": false,
+          "output_directory": "outputs\\d09f5f7ac51a4bb6a04da008262927df\\run"
+        },
+        {
+          "force_current": true,
+          "mode": "composition",
+          "crop_generated": true,
+          "output_directory": "outputs\\eceb6b4559c84c43a4d3db8efb2df193\\run"
+        }
+      ]
+    },
+    {
+      "file": "rgbd_dataset_freiburg1_xyz-rgb.avi",
+      "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz-rgb.avi",
+      "bytes": 8059298,
+      "sha256": "1820b52939af2a2e7afdf78f6398cfbc7816399c8809b3836a9ba8da9bef8022",
+      "width": 640,
+      "height": 480,
+      "fps": 30.0,
+      "frames": 798,
+      "duration_seconds": 26.6,
+      "all_frames_decoded": true,
+      "smoke_tests": [
+        {
+          "force_current": false,
+          "mode": "navigation",
+          "crop_generated": false,
+          "output_directory": "outputs\\c0838e91b95d40aea4f5c1a8fc47b4ed\\run"
+        },
+        {
+          "force_current": true,
+          "mode": "composition",
+          "crop_generated": true,
+          "output_directory": "outputs\\df8649a5827d4660ad58762072b985ae\\run"
+        }
+      ]
+    }
+  ]
+}

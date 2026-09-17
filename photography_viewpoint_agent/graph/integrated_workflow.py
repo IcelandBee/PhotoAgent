@@ -36,7 +36,7 @@ class IntegratedState(IntegratedInput, IntegratedOutput, total=False):
 def build_integrated_workflow(config: AgentConfig | None = None, *, backend=None,
                               checkpointer=None, target_graph=None, guide_graph=None,
                               **target_dependencies):
-    # Optional dependency: importing/running the standalone generator stays independent.
+    # Keep the two graphs independent while distributing both packages together.
     from video_guide.core import build_guide_graph
 
     config = config or AgentConfig()

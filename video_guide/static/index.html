@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><title>取景指南 · 构图工作台</title>
+  <link rel="stylesheet" href="/assets/studio.css"><script src="/assets/studio.js" defer></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="取景指南首页"><span class="brand-icon" aria-hidden="true">⌗</span><span>取景指南<small>FRAME / GUIDE</small></span></a><div class="top-caption">从发现画面，到完成构图。</div><span class="workspace-label"><i></i> 本地工作台</span></header>
+<main>
+  <section class="intro"><div><p class="eyebrow">THE COMPOSITION WORKSPACE</p><h1>让好画面，<em>有迹可循。</em></h1><p class="lede">对照目标找到机位，让每一次取景都有明确的下一步。</p></div><div class="intro-index"><span>01 / 视频</span><b>→</b><span>02 / 目标</span><b>→</b><span>03 / 指导</span></div></section>
+  <div class="workspace">
+    <aside class="setup">
+      <form id="form" novalidate>
+        <fieldset id="controls">
+          <section class="setup-section"><div class="section-heading"><span class="step">01</span><h2>放入一段视频</h2><span class="required-label">必填</span></div>
+            <label class="dropzone" id="dropzone" for="video"><span class="upload-icon" aria-hidden="true">↥</span><strong id="file-title">选择视频，或拖到这里</strong><span id="file-detail">MP4 / AVI / MOV / MKV / WebM</span><span class="file-size-note">单个文件最大 200 MB</span><input id="video" name="video" type="file" accept=".mp4,.avi,.mov,.mkv,.webm" required aria-label="输入视频"></label>
+          </section>
+          <section class="setup-section"><div class="section-heading"><span class="step">02</span><h2>确定你的目标</h2></div>
+            <fieldset id="manual-fields" class="mode-fields"><p class="helper">上传 PhotoAgent 的参考帧与 Target Sketch，以及当前画面。</p>
+<label class="file-field" for="current-frame"><span>当前帧</span><input id="current-frame" name="current_frame" type="file" accept="image/*" required></label>
+<label class="file-field" for="reference-frame"><span>Reference Frame</span><input id="reference-frame" name="reference_frame" type="file" accept="image/*" required></label>
+<label class="file-field" for="target-sketch"><span>Target Sketch</span><input id="target-sketch" name="target_sketch" type="file" accept="image/*" required></label>
+<label class="file-field" for="target-state"><span>TargetState JSON</span><textarea id="target-state" name="target_state" rows="5" required></textarea></label>
+<label class="file-field" for="render-meta"><span>RenderMeta JSON</span><textarea id="render-meta" name="render_meta" rows="5" required></textarea></label></fieldset>
+          </section>
+          <section class="setup-section last"><div class="section-heading"><span class="step">03</span><h2>选择分析方式</h2></div><label class="sr-only" for="backend">分析方式</label><select id="backend" name="backend"><option value="local">本地视觉</option><option value="vlm">Qwen · 视频理解</option></select><p class="helper" id="backend-note">基于图像匹配，无需模型服务。适合验证参考视角匹配流程。</p>
+            <fieldset id="vlm-fields" hidden disabled><label class="url-label" for="video_url">原视频 URL <span>选填</span></label><input id="video_url" name="video_url" type="url" placeholder="https://…/video.mp4" autocomplete="off"><p class="helper compact">较大视频可使用公网链接，须与上传视频内容一致。</p><details class="config-help"><summary>模型配置说明</summary><p>模型、接口、密钥和 FPS 在服务端的 <code>config/vlm.json</code> 中配置，保存后下一次分析生效。视频与参考图将发送到配置的模型服务。</p></details></fieldset>
+          </section>
+        </fieldset>
+        <div class="submit-area"><button class="primary" id="submit" type="submit"><span id="submit-label">开始分析</span><span aria-hidden="true">↗</span></button><p class="submit-hint">结果按任务保存在本地</p><div id="form-error" role="alert" hidden></div></div>
+      </form>
+    </aside>
+    <section class="stage" aria-label="分析工作区" id="stage" aria-busy="false">
+      <div class="stage-heading"><div><span class="eyebrow">VIEWFINDER</span><h2>画面工作区</h2></div><span id="stage-status" class="status-pill">等待输入</span></div>
+      <div id="activity" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><div><strong>正在分析画面</strong><p>正在等待服务端结果，请保留此页面。<span id="elapsed">已等待 0 秒</span></p></div></div>
+      <div id="stale-note" class="stale-note" hidden>设置已更改。下方仍是上一次结果，重新分析后才会更新。</div>
+      <div id="empty">
+        <div class="viewfinder"><div class="viewfinder-grid"></div><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span><span class="frame-label">YOUR NEXT FRAME</span><div class="frame-center"><span class="focus-mark" aria-hidden="true">＋</span><h3 id="empty-title">好画面，从这里开始</h3><p id="empty-description">添加一段视频，建立当前画面与目标之间的联系。</p></div><div class="viewfinder-bottom"><span>待建立画面参考</span><span>FRAME  — / —</span></div></div>
+        <div class="empty-steps"><div><span>01</span><h3>找到场景</h3><p>比较当前画面与参考帧</p></div><div><span>02</span><h3>调整取景</h3><p>查看有依据的方向建议</p></div><div><span>03</span><h3>完成构图</h3><p>查看实拍动作建议</p></div></div>
+        <p class="empty-footnote">每一次分析都会保留输入与结果，方便回看与比较。</p>
+      </div>
+      <div id="result" hidden>
+        <div class="result-summary"><div><p id="result-kicker" class="eyebrow"></p><h3 id="result-title"></h3><p id="result-description"></p></div><div class="score"><strong id="score">—</strong><span>参考置信度</span></div></div>
+        <div class="result-meta"><span id="result-context"></span><span id="timing"></span></div>
+        <div class="compare-grid" id="compare-grid"></div>
+
+        <div class="guidance-grid"><article class="guidance-card"><span class="card-number">01 / NEXT MOVE</span><h3>取景指导</h3><p id="guidance"></p></article><article class="guidance-card"><span class="card-number">02 / CAMERA</span><h3>拍摄动作</h3><p id="camera"></p></article></div>
+        <aside id="warnings-box" class="warnings-box" hidden><h3>判断依据与限制</h3><ul id="warnings"></ul></aside>
+        <footer class="result-footer"><span id="task-label"></span><a id="download" target="_blank" rel="noopener">查看完整结果 ↗</a></footer>
+      </div>
+    </section>
+  </div>
+  <footer class="page-footer"><span>FRAME / GUIDE <b>·</b> 为下一次取景提供参考</span><span>单目画面中的方向与焦段建议，请结合现场判断。</span></footer>
+</main>
+<dialog id="image-dialog" aria-labelledby="dialog-caption"><div class="dialog-top"><h2 id="dialog-caption"></h2><button id="close-dialog" type="button" aria-label="关闭大图">✕</button></div><img id="dialog-image" alt=""></dialog>
+</body></html>

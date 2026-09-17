@@ -15,8 +15,8 @@ from photography_viewpoint_agent.renderer.target_sketch import TargetSketchRende
 from photography_viewpoint_agent.graph.workflow import build_workflow
 from photography_viewpoint_agent.schemas.subject import SubjectObservation
 from experiments.fit_target_state.images import frame_for
-from test_depth3d import make_video
-from helpers.mesh_oracle import CpuTriangleOracle
+from .test_depth3d import make_video
+from .helpers.mesh_oracle import CpuTriangleOracle
 
 
 def observation(width=64,height=48,metric=False,metadata=None):

@@ -58,7 +58,6 @@ def test_full_viewpoint_metadata_survives(package_state, tmp_path, mode):
 
 
 def test_real_generation_to_guidance_and_locked_second_step(tmp_path):
-    pytest.importorskip("video_guide")
     from video_guide.core import build_guide_graph
     from photography_viewpoint_agent.graph.integrated_workflow import build_integrated_workflow
 
@@ -93,7 +92,6 @@ def test_real_generation_to_guidance_and_locked_second_step(tmp_path):
 
 
 def test_parent_failure_does_not_call_guide(package_state, tmp_path):
-    pytest.importorskip("video_guide")
     from photography_viewpoint_agent.graph.integrated_workflow import build_integrated_workflow
     class Failed:
         def invoke(self, state):
@@ -108,7 +106,6 @@ def test_parent_failure_does_not_call_guide(package_state, tmp_path):
 
 
 def test_parent_checkpoint_resumes_guidance_without_regenerating(package_state, tmp_path, monkeypatch):
-    pytest.importorskip("video_guide")
     import video_guide.core.graph as guide_module
     from langgraph.checkpoint.memory import InMemorySaver
     from photography_viewpoint_agent.graph.integrated_workflow import build_integrated_workflow

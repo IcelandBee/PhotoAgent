@@ -1,5 +1,7 @@
 # PhotoAgent / Guidance 集成交付记录
 
+> 历史测试/交付记录。当前两个仓库均包含完整上下游源码，安装方式以根目录 README 为准；以下本地路径指向当时的测试产物。
+
 ## 1. Architecture
 
 PhotoAgent 保持 Target Generator 职责；video_guide 为 Target Follower / Controller。两个 Python 包独立 editable 安装到 PhotoAgent 的 Python 3.11.16 环境，未合并源码或内部 State。
