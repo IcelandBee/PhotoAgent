@@ -20,7 +20,6 @@ from photography_viewpoint_agent.nodes.composition_planner import composition_pl
 from photography_viewpoint_agent.nodes.render_sketch import render_target_sketch
 from photography_viewpoint_agent.nodes.validate_sketch import validate_sketch
 from photography_viewpoint_agent.depth_estimation.base import DepthEstimator
-from photography_viewpoint_agent.depth_estimation.monocular import MonocularDepthEstimator, PrecomputedDepthEstimator
 from photography_viewpoint_agent.nodes.estimate_reference_depth import estimate_reference_depth
 
 logger = logging.getLogger(__name__)
@@ -49,13 +48,11 @@ def build_workflow(config: AgentConfig | None = None, *,
     planner = planner if planner is not None else ManualCompositionPlanner()
     detector = detector if detector is not None else YOLOSubjectDetector(
         config.yolo_model, config.person_confidence, config.device)
-    depth_estimator = depth_estimator if depth_estimator is not None else (
-        PrecomputedDepthEstimator(config.depth_path) if config.depth_path else
-        MonocularDepthEstimator(config.depth_model,config.depth_device))
     renderer = renderer if renderer is not None else TargetSketchRenderer(
         config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug,
         subject_noop_position_threshold=config.subject_noop_position_threshold,
-        subject_noop_scale_threshold=config.subject_noop_scale_threshold,splat_radius=config.splat_radius)
+        subject_noop_scale_threshold=config.subject_noop_scale_threshold,splat_radius=config.splat_radius,
+        mesh_stride=config.mesh_stride,mesh_depth_edge_threshold=config.mesh_depth_edge_threshold,mesh_device=config.mesh_device)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),
@@ -65,7 +62,7 @@ def build_workflow(config: AgentConfig | None = None, *,
         "composition_planner": partial(composition_planner, planner=planner),
         "render_target_sketch": partial(render_target_sketch, renderer=renderer, config=config),
         "validate_sketch": partial(validate_sketch, config=config),
-        "estimate_reference_depth": partial(estimate_reference_depth, estimator=depth_estimator, config=config),
+        "estimate_reference_depth": partial(estimate_reference_depth, estimator=depth_estimator, config=config,renderer=renderer),
     }
     graph = StateGraph(AgentState)
     for name, function in nodes.items():
@@ -84,7 +81,7 @@ def build_workflow(config: AgentConfig | None = None, *,
     def route_depth(state: AgentState):
         if state.get('error'):
             return END
-        return 'estimate_reference_depth' if state['target_state'].viewpoint.mode=='depth_3d' else 'render_target_sketch'
+        return 'estimate_reference_depth' if state['target_state'].viewpoint.mode in ('depth_3d','depth_mesh') else 'render_target_sketch'
 
     graph.add_conditional_edges("composition_planner", route_subject,
         {END: END, "detect_reference_subject": "detect_reference_subject", "render_target_sketch": "render_target_sketch",

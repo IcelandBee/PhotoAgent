@@ -5,9 +5,12 @@ from PIL import Image
 from photography_viewpoint_agent.renderer.viewpoint_warp import rotation_homography
 
 
-def project_points(depth, viewpoint):
+def project_points(depth, viewpoint, focal_length_px=None):
     height,width = depth.shape
     _,k,r = rotation_homography((width,height),viewpoint)
+    if focal_length_px is not None:
+        if not np.isfinite(focal_length_px) or focal_length_px<=0:raise ValueError('Invalid focal length')
+        k[0,0]=k[1,1]=focal_length_px
     y,x = np.indices(depth.shape,dtype=np.float32)
     valid = np.isfinite(depth) & (depth>0)
     ids = np.flatnonzero(valid)
@@ -42,7 +45,7 @@ class PointCloudViewpointWarper:
             raise ValueError('splat_radius must be an integer in [1,3]')
         self.radius = splat_radius
 
-    def warp(self, image, depth, viewpoint, fill_color=(128,128,128), subject_bbox=None):
+    def warp(self, image, depth, viewpoint, fill_color=(128,128,128), subject_bbox=None, focal_length_px=None):
         if viewpoint.mode != 'depth_3d':
             raise ValueError('Point cloud backend requires depth_3d')
         width,height = image.size
@@ -52,7 +55,7 @@ class PointCloudViewpointWarper:
         valid_source = np.isfinite(depth)&(depth>0)
         if not valid_source.any():
             raise ValueError('No valid positive depth')
-        ids,uv,z,k,r,center = project_points(depth,viewpoint)
+        ids,uv,z,k,r,center = project_points(depth,viewpoint,focal_length_px)
         pixels = np.asarray(image.convert('RGB')).reshape(-1,3)
         result = np.full((height*width,3),fill_color,np.uint8)
         projected_box = None

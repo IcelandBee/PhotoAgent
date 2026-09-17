@@ -6,6 +6,7 @@ from photography_viewpoint_agent.schemas.video import FrameInfo
 from photography_viewpoint_agent.renderer.viewport import ViewportRenderer
 from photography_viewpoint_agent.renderer.viewpoint_warp import RotationViewpointWarper, warp_bbox
 from photography_viewpoint_agent.renderer.point_cloud_warp import PointCloudViewpointWarper, repair_background_depth
+from photography_viewpoint_agent.renderer.mesh_warp import MeshViewpointWarper, camera_intrinsics
 from photography_viewpoint_agent.depth_estimation.monocular import load_depth
 import numpy as np
 from photography_viewpoint_agent.tools.subject_utils import (
@@ -18,19 +19,24 @@ from photography_viewpoint_agent.tools.geometry import (
 
 class TargetSketchRenderer:
     def __init__(self, width=1280, height=720, fill_color=(128, 128, 128), debug=False,
-                 subject_noop_position_threshold=0.001, subject_noop_scale_threshold=0.001,splat_radius=1):
+                 subject_noop_position_threshold=0.001, subject_noop_scale_threshold=0.001,splat_radius=1,
+                 mesh_stride=2,mesh_depth_edge_threshold=.12,mesh_device='cuda',mesh_warper=None):
         self.viewport_renderer = ViewportRenderer(width, height, fill_color)
         self.size, self.debug = (width, height), debug
         self.noop_position = subject_noop_position_threshold
         self.noop_scale = subject_noop_scale_threshold
         self.point_warper = PointCloudViewpointWarper(splat_radius)
+        self.mesh_warper = mesh_warper if mesh_warper is not None else MeshViewpointWarper(mesh_stride,mesh_depth_edge_threshold,mesh_device)
+
+    def preflight(self,mode):
+        if mode=='depth_mesh':self.mesh_warper.check_available()
 
     def render(self, reference_frame: FrameInfo, reference_subject: SubjectObservation | None,
                target_state: TargetState, output_path: Path, *, reference_depth=None):
         with Image.open(reference_frame.path) as image:
             source = image.convert("RGB")
         viewpoint = target_state.viewpoint
-        if viewpoint.mode == 'depth_3d':
+        if viewpoint.mode in ('depth_3d','depth_mesh'):
             return self._render_depth(source,reference_subject,reference_depth,target_state,output_path)
         warp_meta = None
         warped_source = source
@@ -82,10 +88,12 @@ class TargetSketchRenderer:
 
     def _render_depth(self,source,subject,observation,target,output_path):
         if observation is None:
-            raise ValueError('depth_3d requires reference_depth from depth estimation node')
+            raise ValueError('Depth viewpoint requires reference_depth from depth estimation node')
         depth = load_depth(observation,source.size)
+        scene=float(np.median(depth[depth>0]))
         background = source
         layer = None
+        mask = None
         if target.subject.mode == 'reposition':
             if subject is None:
                 raise ValueError('reposition requires reference_subject detection')
@@ -94,9 +102,8 @@ class TargetSketchRenderer:
             background = build_background(source,mask)
             depth = repair_background_depth(depth,mask)
         output_path.parent.mkdir(parents=True,exist_ok=True)
-        warped,warp_meta,valid = self.point_warper.warp(background,depth,target.viewpoint,
-            fill_color=self.viewport_renderer.fill_color,
-            subject_bbox=subject.bbox if subject is not None and layer is None else None)
+        warped,warp_meta,valid = self._apply_depth_viewpoint(background,depth,observation,target.viewpoint,
+            scene,mask,subject.bbox if subject is not None and layer is None else None,output_path.parent)
         warp_meta['background_depth_repaired'] = layer is not None
         canvas,meta = self.viewport_renderer.transform_background_by_viewport(warped,target.framing.reference_viewport)
         projected = warp_meta['projected_subject_bbox']
@@ -121,6 +128,22 @@ class TargetSketchRenderer:
             'source_subject_bbox':subject.bbox if subject is not None else None,
             'natural_subject_bbox':natural,'rendered_subject_bbox':actual,'subject_transform_applied':layer is not None})
         return str(output_path.resolve()),meta
+
+    def _apply_depth_viewpoint(self,image,depth,observation,viewpoint,scene,mask,bbox,output_dir):
+        if viewpoint.mode=='depth_mesh':
+            return self.mesh_warper.warp(image,depth,viewpoint,observation,
+                fill_color=self.viewport_renderer.fill_color,subject_mask=mask,
+                debug_dir=output_dir if self.debug else None,scene_reference_depth=scene)
+        k,intrinsics_source=camera_intrinsics(image.size,viewpoint,observation)
+        # Metric storage stays intact. Convert only this baseline's temporary render input.
+        point_depth=depth/scene if observation.metric else depth
+        image,meta,valid=self.point_warper.warp(image,point_depth,viewpoint,
+            fill_color=self.viewport_renderer.fill_color,subject_bbox=bbox,
+            focal_length_px=float(k[0,0]) if intrinsics_source=='depth_pro' else None)
+        meta.update(metric_depth=observation.metric,intrinsics_source=intrinsics_source,
+            scene_reference_depth=scene,translation_metric_equivalent=[viewpoint.translation_x*scene,
+                viewpoint.translation_y*scene,viewpoint.translation_z*scene] if observation.metric else None)
+        return image,meta,valid
 
     def _save_follow(self, canvas, meta, natural, output_path):
         output_path.parent.mkdir(parents=True, exist_ok=True)

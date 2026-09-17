@@ -1,0 +1,19 @@
+{
+  "subject": {
+    "mode": "follow_reference"
+  },
+  "framing": {
+    "reference_viewport": [
+      0,
+      0,
+      1,
+      1
+    ]
+  },
+  "viewpoint": {
+    "mode": "depth_mesh",
+    "horizontal_fov_deg": 60,
+    "border_mode": "constant",
+    "translation_z": 0.03
+  }
+}

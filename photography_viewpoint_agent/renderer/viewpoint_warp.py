@@ -11,10 +11,7 @@ from PIL import Image
 from photography_viewpoint_agent.schemas.target import ViewpointTarget
 
 
-def rotation_homography(size, viewpoint):
-    width, height = size
-    if min(size) <= 0:
-        raise ValueError('Image dimensions must be positive')
+def rotation_matrix(viewpoint):
     yaw, pitch, roll = -np.deg2rad([viewpoint.yaw_deg, viewpoint.pitch_deg, viewpoint.roll_deg])
     cy, sy = np.cos(yaw), np.sin(yaw)
     cp, sp = np.cos(pitch), np.sin(pitch)
@@ -22,7 +19,14 @@ def rotation_homography(size, viewpoint):
     ry = np.array([[cy,0,sy],[0,1,0],[-sy,0,cy]])
     rx = np.array([[1,0,0],[0,cp,-sp],[0,sp,cp]])
     rz = np.array([[cr,-sr,0],[sr,cr,0],[0,0,1]])
-    rotation = rz @ rx @ ry
+    return rz @ rx @ ry
+
+
+def rotation_homography(size, viewpoint):
+    width, height = size
+    if min(size) <= 0:
+        raise ValueError('Image dimensions must be positive')
+    rotation = rotation_matrix(viewpoint)
     focal = (width/2)/np.tan(np.deg2rad(viewpoint.horizontal_fov_deg)/2)
     intrinsic = np.array([[focal,0,width/2],[0,focal,height/2],[0,0,1]])
     homography = intrinsic @ rotation @ np.linalg.inv(intrinsic)

@@ -29,15 +29,15 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
     framing = sum(abs(a - b) for a, b in zip(expected_viewport, meta.rendered_viewport)) / 4
     passed = framing <= config.framing_threshold
     viewpoint = target.viewpoint
-    if viewpoint.mode == 'depth_3d' or viewpoint.active:
+    if viewpoint.mode in ('depth_3d','depth_mesh') or viewpoint.active:
         if meta.viewpoint_warp is None or meta.viewpoint_warp.get('parameters') != viewpoint.model_dump():
             passed = False
             messages.append('Viewpoint metadata does not match requested transform.')
-        if viewpoint.mode == 'depth_3d':
+        if viewpoint.mode in ('depth_3d','depth_mesh'):
             warp = meta.viewpoint_warp or {}
-            if warp.get('backend') != 'depth_3d' or not 0 < warp.get('valid_fraction',0) <= 1:
+            if warp.get('backend') != viewpoint.mode or not 0 < warp.get('valid_fraction',0) <= 1:
                 passed = False
-                messages.append('Missing depth_3d coverage/backend metadata.')
+                messages.append('Missing depth viewpoint coverage/backend metadata.')
             messages.append('Depth coverage is diagnostic; PASS validates geometry plumbing, not novel-view realism.')
     if not passed:
         messages.append("Framing error exceeds threshold.")
@@ -50,7 +50,7 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
         messages.append("Requested viewport metadata does not match target.")
     if meta.source_subject_bbox is not None:
         source_box = meta.source_subject_bbox
-        if viewpoint.mode == 'depth_3d':
+        if viewpoint.mode in ('depth_3d','depth_mesh'):
             source_box = (meta.viewpoint_warp or {}).get('projected_subject_bbox')
             if target.subject.mode == 'reposition':
                 messages.append('Natural subject projection omitted: background depth repaired; subject rendered independently.')

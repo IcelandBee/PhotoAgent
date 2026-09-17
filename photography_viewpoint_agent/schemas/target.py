@@ -24,7 +24,7 @@ class FramingTarget(Schema):
 
 
 class ViewpointTarget(Schema):
-    mode: Literal['none', 'rotation', 'depth_3d'] = 'none'
+    mode: Literal['none', 'rotation', 'depth_3d', 'depth_mesh'] = 'none'
     yaw_deg: float = Field(default=0, ge=-15, le=15)
     pitch_deg: float = Field(default=0, ge=-15, le=15)
     roll_deg: float = Field(default=0, ge=-15, le=15)
@@ -36,8 +36,10 @@ class ViewpointTarget(Schema):
 
     @model_validator(mode='after')
     def no_ignored_angles(self):
-        if self.mode != 'depth_3d' and any((self.translation_x,self.translation_y,self.translation_z)):
-            raise ValueError('Translation requires viewpoint.mode=depth_3d')
+        if self.mode not in ('depth_3d','depth_mesh') and any((self.translation_x,self.translation_y,self.translation_z)):
+            raise ValueError('Translation requires a depth viewpoint mode')
+        if self.mode == 'depth_mesh' and self.border_mode != 'constant':
+            raise ValueError('depth_mesh requires constant fill; unknown geometry must remain invalid')
         if self.mode == 'none' and any((self.yaw_deg, self.pitch_deg, self.roll_deg)):
             raise ValueError('Nonzero angles require viewpoint.mode=rotation')
         return self

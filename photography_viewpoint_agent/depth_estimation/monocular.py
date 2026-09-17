@@ -5,61 +5,7 @@ from PIL import Image
 from photography_viewpoint_agent.schemas.depth import DepthObservation
 
 
-def normalize_depth(depth, size):
-    depth = np.asarray(depth, dtype=np.float32)
-    if depth.shape != (size[1], size[0]):
-        raise ValueError('Depth dimensions must exactly match reference frame')
-    valid = np.isfinite(depth) & (depth > 0)
-    if not valid.any():
-        raise ValueError('Depth contains no finite positive values')
-    median = float(np.median(depth[valid]))
-    normalized = np.zeros(depth.shape, np.float32)
-    normalized[valid] = depth[valid]/median
-    if not np.isfinite(normalized).all():
-        raise ValueError('Depth normalization overflow')
-    return normalized, {'input_median':median,'valid_fraction':float(valid.mean()),
-        'min':float(normalized[valid].min()),'median':float(np.median(normalized[valid])),
-        'max':float(normalized[valid].max())}
-
-
-def save_observation(depth, frame, path, metadata):
-    normalized, stats = normalize_depth(depth,(frame.width,frame.height))
-    path = Path(path)
-    path.parent.mkdir(parents=True,exist_ok=True)
-    np.save(path,normalized,allow_pickle=False)
-    return DepthObservation(depth_path=str(path.resolve()),width=frame.width,height=frame.height,
-        metadata={**metadata,'normalization_stats':stats})
-
-
-def load_depth(observation, size):
-    if (observation.width,observation.height) != size:
-        raise ValueError('Depth observation dimensions mismatch')
-    depth = np.load(observation.depth_path,allow_pickle=False)
-    # Validate the stored normalized Z map; do not reinterpret it as disparity.
-    normalized, _ = normalize_depth(depth,size)
-    return normalized
-
-
-def save_visualization(depth, path):
-    valid = np.isfinite(depth) & (depth>0)
-    inverse = np.zeros_like(depth)
-    inverse[valid] = 1/depth[valid]
-    lo,hi = np.percentile(inverse[valid],[2,98])
-    gray = np.uint8(np.clip((inverse-lo)/max(float(hi-lo),1e-6),0,1)*255)
-    rgb = cv2.cvtColor(cv2.applyColorMap(gray,cv2.COLORMAP_TURBO),cv2.COLOR_BGR2RGB)
-    rgb[~valid] = 0
-    Image.fromarray(rgb).save(path)
-
-
-class PrecomputedDepthEstimator:
-    """Input .npy is positive camera Z, NOT raw inverse-depth model output."""
-    def __init__(self, path):
-        self.path = Path(path)
-
-    def estimate(self, frame, output_path):
-        depth = np.load(self.path,allow_pickle=False)
-        return save_observation(depth,frame,output_path,{'source':'precomputed',
-            'input_path':str(self.path.resolve()),'invalid_pixels':'excluded'})
+from .storage import normalize_depth, save_observation, load_depth, save_visualization, PrecomputedDepthEstimator
 
 
 class MonocularDepthEstimator:

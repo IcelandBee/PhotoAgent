@@ -73,3 +73,12 @@ $case = "31_combined__frame_zoom_out__subject_right_smaller"
 | [55_depth3d__translate_up_small.json](55_depth3d__translate_up_small.json) | 相机上移0.03，画面向下 |
 
 这些平移量以深度中位数1为单位，不是米，也不是画面宽高比例。全部通过 app.py 的正式工作流；运行方法和深度复用说明见 [depth_3d文档](../docs/depth3d.md)。旧00和40分别复用为none及rotation基准。
+
+## Depth Pro + Mesh（可选GPU）
+
+- [60_depthmesh__identity.json](60_depthmesh__identity.json)：零运动mesh基准。
+- [61_depthmesh__translate_right_small.json](61_depthmesh__translate_right_small.json)：右移0.03。
+- [62_depthmesh__translate_forward_small.json](62_depthmesh__translate_forward_small.json)：前移0.03。
+- [63_combined__depthmesh__zoom_in__subject_right.json](63_combined__depthmesh__zoom_in__subject_right.json)：mesh旋转平移、viewport、人物独立编辑。
+
+默认depth backend为Depth Pro；支持显式选择Depth Anything或预计算深度。GPU服务器运行和A/B步骤见 [depth_mesh说明](../docs/depth_mesh.md)。本机CPU未执行PyTorch3D GPU渲染。

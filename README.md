@@ -231,3 +231,9 @@ CPU 真实测试采用用户的滑雪视频：follow-reference、正常 repositi
 正式 workflow 现支持 `viewpoint.mode=depth_3d`，保留原 none / rotation。
 新增案例 `50_depth3d__identity`、`51_depth3d__translate_right_small`、`52_depth3d__translate_forward_small`、`53_depth3d__translate_backward_small`、`54_combined__depth3d__zoom_in__subject_right`、`55_depth3d__translate_up_small`。
 完整运行方法、CPU深度模型、坐标方向与验收结果见 [depth_3d说明](docs/depth3d.md)。
+
+## 可选 depth_mesh（GPU）
+
+在保留none/rotation/depth_3d的基础上，新增Depth Pro + 深度断层裁面的2.5D网格 + PyTorch3D三角形光栅化。
+CPU已验证geometry/topology及mock完整workflow；真实Depth Pro推理与GPU效果尚待服务器验收。
+安装、metric深度、同深度A/B工具及验收命令见 [depth_mesh文档](docs/depth_mesh.md)。

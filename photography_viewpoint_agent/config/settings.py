@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import Field
 from photography_viewpoint_agent.schemas.base import Schema
 
@@ -14,11 +14,16 @@ class AgentConfig(Schema):
     yolo_model: str = "yolo11n-seg.pt"
     person_confidence: float = Field(default=0.4, gt=0, le=1)
     device: str = "cpu"
-    depth_model: str = 'depth-anything/Depth-Anything-V2-Small-hf'
+    depth_model: str | None = None
+    depth_backend: Literal['auto','depth_anything','depth_pro','precomputed'] = 'auto'
     depth_path: str | None = None
+    depth_metadata_path: str | None = None
     depth_device: str = 'cpu'
     depth_debug: bool = False
     splat_radius: int = Field(default=1, ge=1, le=3, strict=True)
+    mesh_stride: int = Field(default=2, ge=1, le=16, strict=True)
+    mesh_depth_edge_threshold: float = Field(default=0.12, gt=0)
+    mesh_device: str = 'cuda'
     debug: bool = False
     subject_noop_position_threshold: float = Field(default=0.001, ge=0)
     subject_noop_scale_threshold: float = Field(default=0.001, ge=0)
