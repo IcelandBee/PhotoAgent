@@ -1,25 +1,25 @@
-# depth_3d：正式 workflow 的相对深度点云 backend
+# depth_3d：实验旋转 backend 与低层点云实现
 
 ## 设计与接入
 
-保留 none / rotation，在 TargetState.viewpoint.mode 增加 depth_3d。
+正式 viewpoint.mode 仅 none/rotation；选择 AgentConfig.viewpoint_backend=depth_3d 且角度非零时使用点云旋转，camera translation 固定为0。语义规范见 [TRANSFORM_SEMANTICS](TRANSFORM_SEMANTICS.md)。
 
 ```text
 load_video → extract_frames → select_reference_frame + get_current_frame
   → composition_planner
   → [subject=reposition 时 detect_reference_subject]
-  → [viewpoint=depth_3d 时 estimate_reference_depth]
+  → [非零旋转 AND backend=depth_3d 时 estimate_reference_depth]
   → render_target_sketch → validate_sketch
 ```
 
-路由读取 planner 最终输出。none / rotation 不调用深度估计，构建 graph 也不加载模型权重。原四参数 renderer 注入接口在旧模式下照常调用，depth_3d 额外传入 keyword reference_depth。
+路由读取 planner 最终输出。零角度或 homography backend 不调用深度估计，构建 graph 也不加载模型权重。原四参数 renderer 注入接口在旧模式下照常调用，depth_3d 额外传入 keyword reference_depth。
 
 AgentState.reference_depth 为 DepthObservation：depth_path、width、height、Z-depth 表示、median_one 归一化约定及估计来源/统计。估计器通过 build_workflow(depth_estimator=...) 可替换。
 
-### 三种渲染路径
+### 渲染路径（backend 来自配置）
 
 - none：原有处理。
-- rotation：保留 Homography；零角度跳过插值。
+- rotation + homography：保留 Homography；零角度跳过所有 viewpoint renderer。
 - depth_3d + follow_reference：整图 RGB/Z → 点云渲染 → 原有 reference_viewport。
 - depth_3d + reposition：原始图像分割人物 → 修补背景 RGB 和对应深度 → 只对背景进行点云渲染 → reference_viewport → 按原逻辑 contain 缩放并合成人物。
 
@@ -43,11 +43,11 @@ Z = 1 / inverse
 Z = Z / median(Z)
 ```
 
-这是解决相对深度仿射歧义的一种固定启发式，不恢复真实距离。translation=0.03 表示源相机位移等于归一化场景中位 Z 的3%，不是3厘米，也不是图宽的3%。各帧的尺度仍可能变化。
+这是解决相对深度仿射歧义的一种固定启发式，不恢复真实距离。仅低层研究中的 translation=0.03 表示源相机位移等于归一化场景中位 Z 的3%，不是3厘米，也不是图宽的3%。各帧的尺度仍可能变化。
 
 预计算输入：`--depth-path depth.npy`，要求二维、与选中的参考帧尺寸完全一致、正值表示更远的相机 Z。**不能直接传原始 inverse depth 或上色的 depth PNG。** 输入会以有效值中位数归一化；NaN/Inf/非正值排除；全无效/尺寸错误明确失败。更换视频/帧后不能复用旧深度；当前仅能检查尺寸，不能证明文件对应同一场景。
 
-## 几何与方向
+## 几何与方向（保留低层 R+t；正式 C 恒为0）
 
 x向右、y向下、z向前；列向量，像素中心索引为整数。
 
@@ -97,7 +97,7 @@ python -m pip install -r requirements.txt
 ```powershell
 .\.venv311\Scripts\python app.py `
   --video D:/Data/videoagent/test_data/PhotoAgent/mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4 `
-  --target-state examples/51_depth3d__translate_right_small.json `
+  --target-state examples/viewpoint_yaw_right.json --viewpoint-backend depth_3d `
   --work-dir workdir/depth3d_right_new `
   --depth-model workdir/depth_models/depth-anything-v2-small `
   --depth-device cpu --device cpu --splat-radius 1 --debug
@@ -110,7 +110,7 @@ python -m pip install -r requirements.txt
 ```powershell
 .\.venv311\Scripts\python app.py `
   --video D:/Data/videoagent/test_data/PhotoAgent/mixkit-children-skiing-on-the-plain-of-a-pine-forest-3349-full-hd.mp4 `
-  --target-state examples/54_combined__depth3d__zoom_in__subject_right.json `
+  --target-state examples/framing_plus_subject_plus_yaw.json --viewpoint-backend depth_3d `
   --depth-path workdir/depth3d_acceptance/identity/reference_depth.npy `
   --work-dir workdir/depth3d_combined_new --debug
 ```
@@ -119,16 +119,7 @@ python -m pip install -r requirements.txt
 
 ## 示例索引
 
-复用旧 baseline 和 rotation，避免新增重复配置：
-
-- 00_baseline__full_frame_follow.json：旧配置无 viewpoint，none基准。
-- 40_viewpoint_only__yaw_right_5deg.json：已有rotation-only。
-- 50_depth3d__identity.json：深度零运动。
-- 51_depth3d__translate_right_small.json：tx=+0.03。
-- 52_depth3d__translate_forward_small.json：tz=+0.03。
-- 53_depth3d__translate_backward_small.json：tz=-0.03。
-- 54_combined__depth3d__zoom_in__subject_right.json：yaw3°、pitch-2°、tx0.03、viewport0.1..0.9、独立人物。
-- 55_depth3d__translate_up_small.json：ty=+0.03。
+正式案例使用 viewpoint_yaw_right.json、framing_plus_subject_plus_yaw.json；同一 TargetState 可选择不同 renderer 配置。旧50–55示例迁至 [research only](../experiments/camera_translation/README.md)，不得传给 app.py。
 
 ## Debug 输出
 
@@ -143,7 +134,9 @@ python -m pip install -r requirements.txt
 
 后三组图像通过 --debug 保存。result.json 的 render_meta.viewpoint_warp 包含参数、K、R、源坐标相机中心、外参t、coverage、depth_stats、kernel和背景深度是否修补；reference_depth.metadata记录来源、模型、转换参数。旧padding仅描述viewport矩形边缘，不能代替点云coverage。
 
-## 实际完整 workflow 验收（滑雪视频）
+## 历史完整 workflow 验收（旧语义，仅保留实验记录）
+
+以下数字来自重构之前，含平移的旧 workflow 已退出正式 API。当前验证以 TRANSFORM_REFACTOR_DELIVERY.md 为准。
 
 路径：`D:/Project/PhotoAgent/workdir/depth3d_acceptance/`。所有以下用例均通过 app.py 处理完整视频并经过图节点，不是独立renderer demo。参考帧1920×1080、输出1280×720、CPU。
 
@@ -166,7 +159,7 @@ none / rotation 故意提供不存在的depth model，均成功，确认没有�
 
 全部8例workflow validation通过；PASS仅表示接口、几何参数、输出尺寸和人物目标位置等通过，**不代表深度准确或图像逼真**。钢架、人物边缘有点云空洞、轮廓拉扯，雪地深度断层会留下条纹。组合例仍有原滑雪板残留、人物分割白边，这是已有mask不包含滑雪板与修补近似的限制。
 
-## 测试与建议范围
+## 低层研究测试与建议范围（非正式 composition API）
 
 ```powershell
 .\.venv311\Scripts\python -m pytest tests experiments/fit_target_state/tests -q
@@ -176,7 +169,7 @@ none / rotation 故意提供不存在的depth model，均成功，确认没有�
 
 建议从 yaw/pitch ±3°、roll ±2°、translation各轴 ±0.005～0.02 开始。示例0.03便于观察，但本图近景位移已明显。参数硬限制角度±15°、平移±0.2并非推荐范围；组合运动、极近物体、宽FoV更易出空洞。没有对其他场景的稳定性作保证。
 
-## 文件清单
+## 历史实现文件清单（旧示例已迁移研究目录）
 
 新增：
 - schemas/depth.py

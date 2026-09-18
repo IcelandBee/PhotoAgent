@@ -6,13 +6,14 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 from .config import load_config, validate_config
-from .models import GuidanceAction, GuideResult, _ACTIONS
+from .models import GuidanceAction, GuideResult, _ACTIONS, validate_viewpoint_intent
 from .vision import compare, alignment, corners
 
 
 class LocalBackend:
     """Conservative offline image evidence; never infer 3D motion from a 2D crop."""
     def analyze(self, current, reference, target_sketch, video, target_state, render_meta, video_url=None):
+        validate_viewpoint_intent(target_state.get("viewpoint", {}))
         reached, confidence, evidence = compare(current, reference)
         warnings = ["本地匹配无法可靠恢复三维位移、人物动作或真实焦距；复杂构图请使用 VLM。"]
         if not reached:
@@ -60,14 +61,19 @@ class VLMBackend:
             setattr(self, key, value)
 
     def analyze(self, current, reference, target_sketch, video, target_state, render_meta, video_url=None):
+        validate_viewpoint_intent(target_state.get("viewpoint", {}))
         instruction = """你是实拍取景指导助手。三图依次为 Current Frame、Reference Frame、Target Sketch。
-Reference 是优秀历史真实视角；Target Sketch 是最终理想构图，可能扩面、人物重排或深度视点变换，绝不假设它是任何图中的裁剪区域。
+Reference 是优秀历史真实视角；Target Sketch 是最终理想构图，可能扩面、人物重排或视角旋转，绝不假设它是任何图中的裁剪区域。
 先判断 Current 是否接近 Reference 视角。未接近时 phase=navigation，只输出摄影师相机移动/朝向动作，禁止提前指导人物或变焦。
 接近后比较 Current 与 Target Sketch，结合 TargetState 和 RenderMeta 输出 composition 动作；达到目标时 reached 且 actions=[]。
 reference_reached 表示已进入参考视角附近、可以执行目标调整；不要把目标要求的后退/平移再次误判为需要返回原机位。
 subject.mode=reposition 明确表示人物目标站位/尺度改变，应结合 source/natural/rendered/target bbox 判断人物动作，不能转换成裁图。
-reference_viewport 超出 [0,1] 或 padding>0 是合法扩面意图，可通过后退、zoom_out 或取景调整实现；填充像素不是需要复现的真实物体。
-viewpoint 的 translation_x/y/z 表示三维相机位置变化（原参考相机坐标系），不是二维裁图；结合现场证据判断动作方向，不凭符号盲猜。
+framing.reference_viewport = desired 2D framing：整幅 reference view 的平移、crop、zoom、扩面，人物与背景一起变化。它不是物理机位位移。
+viewport 向右 shift 表示视窗取原参考坐标更右侧，图像内容向左；优先考虑 pan / framing adjustment，禁止只根据 viewport shift 推断 move_right 等 camera physical translation。
+reference_viewport 超出 [0,1] 或 padding>0 是合法扩面意图，可考虑 zoom_out/取景调整；只有当前图像提供独立证据时才建议实际后退。填充像素不是需要复现的真实物体。
+viewpoint yaw_deg/pitch_deg/roll_deg = explicit camera orientation change，光心和摄影师站位不变。正 yaw 向右转、正 pitch 抬头、正 roll 顺时针倾斜。
+subject.bbox = desired subject layout，最终画布中的人物位置/尺度 envelope；人物相对背景独立移动，不能用整体 viewport shift 替代。
+目标生成固定顺序是 Viewpoint Rotation → 2D Framing → Subject Layout。depth backend 只是旋转的渲染方法，不代表相机发生了平移。
 render_meta 描述实际渲染后的视窗、padding、subject bbox 和 viewpoint_warp。以当前图为准，不把视频末帧当作当前帧。
 方向左右均以摄影师当前画面为准。无法确定可执行动作时 uncertain，target_reached=false，actions=[]；不编造距离或焦距。
 只返回 JSON: {"phase":"navigation|composition|reached|uncertain","reference_reached":bool,"target_reached":bool,

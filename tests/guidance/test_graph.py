@@ -35,9 +35,9 @@ def test_target_intents_preserved(payload, case):
         payload["render_meta"].update(padding=[10, 10, 10, 10], rendered_viewport=[-.2, -.1, 1.2, 1.1])
         Image.new("RGB", (150, 100), "navy").save(payload["target_sketch"])
     if case.startswith("depth"):
-        payload["target_state"]["viewpoint"] = {"mode": case, "translation_x": .1}
+        payload["target_state"]["viewpoint"] = {"mode": "rotation", "yaw_deg": 5}
         payload["render_meta"]["viewpoint_warp"] = {"mode": case, "metadata": {"holes": .12}}
-        actor, action = "camera", "move_right"
+        actor, action = "camera", "pan_right"
     engine = MockBackend(actor=actor, action=action)
     result = build_guide_graph(engine).invoke(payload)["result"]
     assert result["actions"][0]["actor"] == actor
@@ -145,3 +145,21 @@ def test_invalid_backend_result_not_published(payload):
     with pytest.raises(ValueError, match="disagree"):
         build_guide_graph(Invalid()).invoke(payload)
     assert not (Path(payload["session_directory"]) / "guidance/step_000001").exists()
+
+
+@pytest.mark.parametrize('field,value', [('translation_x', 0), ('translation_y', .03), ('translation_z', 0), ('mode', 'depth_mesh'), ('horizontal_fov_deg', 60)])
+def test_legacy_viewpoint_rejected_before_backend(payload, field, value):
+    payload['target_state']['viewpoint'] = {'mode': 'none', field: value}
+    backend = MockBackend()
+    with pytest.raises(ValueError, match='viewpoint'):
+        build_guide_graph(backend).invoke(payload)
+    assert backend.calls == 0
+
+
+@pytest.mark.parametrize('name', ['LocalBackend', 'VLMBackend'])
+def test_direct_backend_rejects_legacy_translation(name):
+    from video_guide.core import backends
+    # Validation must precede image processing and network calls.
+    backend = object.__new__(getattr(backends, name))
+    with pytest.raises(ValueError, match='orientation only'):
+        backend.analyze(None, None, None, None, {'viewpoint': {'translation_x': 0}}, {})

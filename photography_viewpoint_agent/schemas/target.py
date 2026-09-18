@@ -20,34 +20,31 @@ class SubjectTarget(Schema):
 
 
 class FramingTarget(Schema):
+    """Whole-view 2D framing on the same-size, optionally rotated reference canvas."""
     reference_viewport: ViewportBox
 
 
 class ViewpointTarget(Schema):
-    mode: Literal['none', 'rotation', 'depth_3d', 'depth_mesh'] = 'none'
+    """Camera orientation only; optical center stays fixed.
+
+    Whole-view 2D shift/zoom belongs to framing.reference_viewport.
+    Independent person position/scale belongs to subject.bbox.
+    Renderer choice, intrinsics and border handling belong to AgentConfig.
+    """
+    mode: Literal['none', 'rotation'] = 'none'
     yaw_deg: float = Field(default=0, ge=-15, le=15)
     pitch_deg: float = Field(default=0, ge=-15, le=15)
     roll_deg: float = Field(default=0, ge=-15, le=15)
-    horizontal_fov_deg: float = Field(default=60, ge=10, le=150)
-    border_mode: Literal['constant', 'replicate'] = 'constant'
-    translation_x: float = Field(default=0, ge=-0.2, le=0.2)
-    translation_y: float = Field(default=0, ge=-0.2, le=0.2)
-    translation_z: float = Field(default=0, ge=-0.2, le=0.2)
 
     @model_validator(mode='after')
     def no_ignored_angles(self):
-        if self.mode not in ('depth_3d','depth_mesh') and any((self.translation_x,self.translation_y,self.translation_z)):
-            raise ValueError('Translation requires a depth viewpoint mode')
-        if self.mode == 'depth_mesh' and self.border_mode != 'constant':
-            raise ValueError('depth_mesh requires constant fill; unknown geometry must remain invalid')
         if self.mode == 'none' and any((self.yaw_deg, self.pitch_deg, self.roll_deg)):
             raise ValueError('Nonzero angles require viewpoint.mode=rotation')
         return self
 
     @property
     def active(self):
-        return self.mode != 'none' and any((self.yaw_deg, self.pitch_deg, self.roll_deg,
-                                           self.translation_x,self.translation_y,self.translation_z))
+        return any((self.yaw_deg, self.pitch_deg, self.roll_deg))
 
 
 class TargetState(Schema):

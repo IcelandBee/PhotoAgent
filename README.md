@@ -101,3 +101,7 @@ GPU 测试在缺少 CUDA/PyTorch3D 时明确 skip。Web 是本机演示服务，
 - [VLM 配置](docs/QWEN_SETUP.md)
 - [初次整合记录（历史）](docs/INTEGRATION_DELIVERY.md)
 - [滑雪视频真实 VLM 测试](docs/GLM_LIVE_TEST.md)
+
+## 编辑语义
+
+正式 TargetState 的 viewpoint 仅表示 yaw/pitch/roll，framing 表示整图二维构图，subject 表示最终人物布局；顺序固定为旋转→取景→人物。默认 homography，depth backend 移至 AgentConfig，只有非零旋转时使用，正式平移恒为零。详见 [Transform 语义与迁移](docs/TRANSFORM_SEMANTICS.md)。

@@ -61,24 +61,18 @@ $case = "31_combined__frame_zoom_out__subject_right_smaller"
 
 旋转先于 viewport；此时 viewport 坐标相对于同尺寸的旋转后画布。详细方向与静态图片 CLI 见 [旋转实验说明](../experiments/viewpoint_rotation/README.md)。
 
-## 深度机位编辑
+## 职责分离正式案例
 
-| 案例 | 作用 |
+| 文件 | 变化 |
 | --- | --- |
-| [50_depth3d__identity.json](50_depth3d__identity.json) | 深度backend零运动，对照原图 |
-| [51_depth3d__translate_right_small.json](51_depth3d__translate_right_small.json) | 相机右移0.03，近景向左移动更多 |
-| [52_depth3d__translate_forward_small.json](52_depth3d__translate_forward_small.json) | 相机前移0.03 |
-| [53_depth3d__translate_backward_small.json](53_depth3d__translate_backward_small.json) | 相机后移0.03 |
-| [54_combined__depth3d__zoom_in__subject_right.json](54_combined__depth3d__zoom_in__subject_right.json) | 3D旋转平移、显式裁剪、独立人物右置 |
-| [55_depth3d__translate_up_small.json](55_depth3d__translate_up_small.json) | 相机上移0.03，画面向下 |
+| framing_shift_right.json | 视窗右移0.1，零旋转 |
+| framing_zoom_in.json | 中心裁剪放大，零旋转 |
+| viewpoint_yaw_right.json | 原地右转5°，identity viewport |
+| viewpoint_pitch_up.json | 抬头5° |
+| framing_plus_yaw.json | yaw后执行viewport |
+| subject_move_right.json | 只移动人物，背景取景不变 |
+| framing_plus_subject_plus_yaw.json | 旋转→取景→最终人物布局 |
 
-这些平移量以深度中位数1为单位，不是米，也不是画面宽高比例。全部通过 app.py 的正式工作流；运行方法和深度复用说明见 [depth_3d文档](../docs/depth3d.md)。旧00和40分别复用为none及rotation基准。
+默认使用 homography。通过 `--viewpoint-backend depth_3d` 或 `depth_mesh` 选择实验旋转后端；TargetState 不变，平移始终为零，零角度跳过所有视点/深度处理。
 
-## Depth Pro + Mesh（可选GPU）
-
-- [60_depthmesh__identity.json](60_depthmesh__identity.json)：零运动mesh基准。
-- [61_depthmesh__translate_right_small.json](61_depthmesh__translate_right_small.json)：右移0.03。
-- [62_depthmesh__translate_forward_small.json](62_depthmesh__translate_forward_small.json)：前移0.03。
-- [63_combined__depthmesh__zoom_in__subject_right.json](63_combined__depthmesh__zoom_in__subject_right.json)：mesh旋转平移、viewport、人物独立编辑。
-
-默认depth backend为Depth Pro；支持显式选择Depth Anything或预计算深度。GPU服务器运行和A/B步骤见 [depth_mesh说明](../docs/depth_mesh.md)。本机CPU未执行PyTorch3D GPU渲染。
+原50–55、60–63案例迁至 [research only](../experiments/camera_translation/README.md)，不能再作为正式 --target-state 输入。语义、迁移与方向见 [TRANSFORM_SEMANTICS](../docs/TRANSFORM_SEMANTICS.md)。

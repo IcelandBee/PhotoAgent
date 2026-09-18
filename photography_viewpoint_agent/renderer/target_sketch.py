@@ -7,6 +7,8 @@ from photography_viewpoint_agent.renderer.viewport import ViewportRenderer
 from photography_viewpoint_agent.renderer.viewpoint_warp import RotationViewpointWarper, warp_bbox
 from photography_viewpoint_agent.renderer.point_cloud_warp import PointCloudViewpointWarper, repair_background_depth
 from photography_viewpoint_agent.renderer.mesh_warp import MeshViewpointWarper, camera_intrinsics
+from photography_viewpoint_agent.renderer.camera_parameters import rotation_parameters
+from photography_viewpoint_agent.tools.plan_validator import validate_plan
 from photography_viewpoint_agent.depth_estimation.monocular import load_depth
 import numpy as np
 from photography_viewpoint_agent.tools.subject_utils import (
@@ -20,11 +22,16 @@ from photography_viewpoint_agent.tools.geometry import (
 class TargetSketchRenderer:
     def __init__(self, width=1280, height=720, fill_color=(128, 128, 128), debug=False,
                  subject_noop_position_threshold=0.001, subject_noop_scale_threshold=0.001,splat_radius=1,
-                 mesh_stride=2,mesh_depth_edge_threshold=.12,mesh_device='cuda',mesh_warper=None):
+                 mesh_stride=2,mesh_depth_edge_threshold=.12,mesh_device='cuda',mesh_warper=None,
+                 viewpoint_backend='homography', viewpoint_horizontal_fov_deg=60,
+                 viewpoint_border_mode='constant'):
         self.viewport_renderer = ViewportRenderer(width, height, fill_color)
         self.size, self.debug = (width, height), debug
         self.noop_position = subject_noop_position_threshold
         self.noop_scale = subject_noop_scale_threshold
+        self.viewpoint_backend = viewpoint_backend
+        self.viewpoint_fov = viewpoint_horizontal_fov_deg
+        self.viewpoint_border_mode = viewpoint_border_mode
         self.point_warper = PointCloudViewpointWarper(splat_radius)
         self.mesh_warper = mesh_warper if mesh_warper is not None else MeshViewpointWarper(mesh_stride,mesh_depth_edge_threshold,mesh_device)
 
@@ -33,16 +40,20 @@ class TargetSketchRenderer:
 
     def render(self, reference_frame: FrameInfo, reference_subject: SubjectObservation | None,
                target_state: TargetState, output_path: Path, *, reference_depth=None):
+        target_state = validate_plan(target_state)
         with Image.open(reference_frame.path) as image:
             source = image.convert("RGB")
         viewpoint = target_state.viewpoint
-        if viewpoint.mode in ('depth_3d','depth_mesh'):
-            return self._render_depth(source,reference_subject,reference_depth,target_state,output_path)
+        parameters = self._rotation_parameters(viewpoint) if viewpoint.active else None
+        if viewpoint.active and self.viewpoint_backend in ('depth_3d','depth_mesh'):
+            return self._render_depth(source,reference_subject,reference_depth,target_state,output_path,parameters)
         warp_meta = None
         warped_source = source
         def rotate(image):
             return RotationViewpointWarper().warp(image,
-                **viewpoint.model_dump(exclude={'mode','translation_x','translation_y','translation_z'}),fill_color=self.viewport_renderer.fill_color)
+                yaw_deg=parameters.yaw_deg, pitch_deg=parameters.pitch_deg, roll_deg=parameters.roll_deg,
+                horizontal_fov_deg=parameters.horizontal_fov_deg, border_mode=parameters.border_mode,
+                fill_color=self.viewport_renderer.fill_color)
         if viewpoint.active:
             warped_source, warp_meta = rotate(source)
         projected_box = reference_subject.bbox if reference_subject is not None else None
@@ -53,6 +64,7 @@ class TargetSketchRenderer:
         natural = (transform_bbox_by_viewport(projected_box, meta.rendered_viewport)
                    if reference_subject is not None else None)
         meta = meta.model_copy(update={
+            **self._viewpoint_metadata(viewpoint),
             "viewpoint_warp": warp_meta,
             "subject_mode": target_state.subject.mode,
             "source_subject_bbox": reference_subject.bbox if reference_subject is not None else None,
@@ -86,7 +98,17 @@ class TargetSketchRenderer:
                                        "subject_transform_applied": True})
         return str(output_path.resolve()), meta
 
-    def _render_depth(self,source,subject,observation,target,output_path):
+    def _rotation_parameters(self, viewpoint):
+        return rotation_parameters(viewpoint, self.viewpoint_backend,
+            horizontal_fov_deg=self.viewpoint_fov, border_mode=self.viewpoint_border_mode)
+
+    def _viewpoint_metadata(self, viewpoint):
+        return {'viewpoint_applied': bool(viewpoint.active),
+                'viewpoint_backend': self.viewpoint_backend if viewpoint.active else 'none',
+                'viewpoint_rotation': viewpoint.model_dump(exclude={'mode'}),
+                'camera_translation': (0, 0, 0)}
+
+    def _render_depth(self,source,subject,observation,target,output_path,parameters):
         if observation is None:
             raise ValueError('Depth viewpoint requires reference_depth from depth estimation node')
         depth = load_depth(observation,source.size)
@@ -102,7 +124,7 @@ class TargetSketchRenderer:
             background = build_background(source,mask)
             depth = repair_background_depth(depth,mask)
         output_path.parent.mkdir(parents=True,exist_ok=True)
-        warped,warp_meta,valid = self._apply_depth_viewpoint(background,depth,observation,target.viewpoint,
+        warped,warp_meta,valid = self._apply_depth_viewpoint(background,depth,observation,parameters,
             scene,mask,subject.bbox if subject is not None and layer is None else None,output_path.parent)
         warp_meta['background_depth_repaired'] = layer is not None
         canvas,meta = self.viewport_renderer.transform_background_by_viewport(warped,target.framing.reference_viewport)
@@ -124,7 +146,8 @@ class TargetSketchRenderer:
             if layer is not None:
                 layer.save(output_path.parent/'subject_layer.png')
                 placed.save(output_path.parent/'placed_subject.png')
-        meta = meta.model_copy(update={'viewpoint_warp':warp_meta,'subject_mode':target.subject.mode,
+        meta = meta.model_copy(update={**self._viewpoint_metadata(target.viewpoint),
+            'viewpoint_warp':warp_meta,'subject_mode':target.subject.mode,
             'source_subject_bbox':subject.bbox if subject is not None else None,
             'natural_subject_bbox':natural,'rendered_subject_bbox':actual,'subject_transform_applied':layer is not None})
         return str(output_path.resolve()),meta

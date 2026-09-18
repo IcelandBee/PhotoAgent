@@ -5,7 +5,8 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 from photography_viewpoint_agent.schemas.depth import DepthObservation
-from photography_viewpoint_agent.schemas.target import ViewpointTarget,TargetState
+from photography_viewpoint_agent.schemas.target import TargetState
+from photography_viewpoint_agent.renderer.camera_parameters import CameraWarpParameters
 from photography_viewpoint_agent.renderer.mesh_warp import build_mesh,camera_intrinsics,transform_mesh,screen_to_ndc,MeshViewpointWarper
 from photography_viewpoint_agent.renderer.point_cloud_warp import project_points
 from photography_viewpoint_agent.depth_estimation.storage import save_observation,load_depth,PrecomputedDepthEstimator
@@ -24,7 +25,7 @@ def observation(width=64,height=48,metric=False,metadata=None):
         unit='meter' if metric else 'relative',normalization='none' if metric else 'median_one',metadata=metadata or {})
 
 
-def viewpoint(**kwargs):return ViewpointTarget(mode='depth_mesh',**kwargs)
+def viewpoint(**kwargs):return CameraWarpParameters(mode='depth_mesh',**kwargs)
 
 
 def sample_image(w=64,h=48):
@@ -120,7 +121,7 @@ def test_metric_motion_scale_invariance():
     np.testing.assert_allclose(uv,uv2,atol=1e-6);assert movement[0]==pytest.approx(.5)
 
 
-@pytest.mark.parametrize('case',['right','forward','combined'])
+@pytest.mark.parametrize('case',['yaw','pitch','combined'])
 def test_mesh_complete_workflow_with_cpu_oracle(tmp_path,case):
     path=tmp_path/'video.avi';make_video(path)
     class Depth:
@@ -133,11 +134,11 @@ def test_mesh_complete_workflow_with_cpu_oracle(tmp_path,case):
         def detect(self,frame,path):
             mask=np.zeros((48,64),np.uint8);mask[15:30,20:30]=255;Image.fromarray(mask).save(path)
             return SubjectObservation(bbox=(20/64,15/48,30/64,30/48),mask_path=str(path),confidence=1)
-    v=viewpoint(**({'translation_z':.03} if case=='forward' else {'translation_x':.03}))
-    target=TargetState.model_validate({'viewpoint':v.model_dump(),'subject':{'mode':'reposition','bbox':[.65,.2,.9,.9]} if case=='combined' else {'mode':'follow_reference'},'framing':{'reference_viewport':[.1,.1,.9,.9] if case=='combined' else [0,0,1,1]}})
+    v={'mode':'rotation',**({'pitch_deg':3} if case=='pitch' else {'yaw_deg':3})}
+    target=TargetState.model_validate({'viewpoint':v,'subject':{'mode':'reposition','bbox':[.65,.2,.9,.9]} if case=='combined' else {'mode':'follow_reference'},'framing':{'reference_viewport':[.1,.1,.9,.9] if case=='combined' else [0,0,1,1]}})
     output=tmp_path/'out';depth=Depth()
-    renderer=TargetSketchRenderer(64,48,debug=True,mesh_warper=MeshViewpointWarper(device='cpu_test_oracle',rasterizer=CpuTriangleOracle()))
-    result=build_workflow(AgentConfig(work_dir=str(output),target_width=64,target_height=48,debug=True),
+    renderer=TargetSketchRenderer(64,48,debug=True,viewpoint_backend='depth_mesh',mesh_warper=MeshViewpointWarper(device='cpu_test_oracle',rasterizer=CpuTriangleOracle()))
+    result=build_workflow(AgentConfig(work_dir=str(output),target_width=64,target_height=48,debug=True,viewpoint_backend='depth_mesh'),
         renderer=renderer,depth_estimator=depth,detector=Detector()).invoke({'video_path':str(path),'manual_target_state':target})
     assert not result.get('error'),result.get('error')
     assert result['validation'].passed,result['validation'].messages
@@ -154,8 +155,8 @@ def test_missing_gpu_fails_before_depth_model(tmp_path,monkeypatch):
     path=tmp_path/'video.avi';make_video(path)
     class NeverDepth:
         def estimate(self,*args):pytest.fail('Preflight must fail before loading a large model')
-    t=TargetState.model_validate({'viewpoint':{'mode':'depth_mesh'},'subject':{'mode':'follow_reference'},'framing':{'reference_viewport':[0,0,1,1]}})
-    result=build_workflow(AgentConfig(work_dir=str(tmp_path/'out')),depth_estimator=NeverDepth()).invoke({'video_path':str(path),'manual_target_state':t})
+    t=TargetState.model_validate({'viewpoint':{'mode':'rotation','yaw_deg':3},'subject':{'mode':'follow_reference'},'framing':{'reference_viewport':[0,0,1,1]}})
+    result=build_workflow(AgentConfig(work_dir=str(tmp_path/'out'),viewpoint_backend='depth_mesh'),depth_estimator=NeverDepth()).invoke({'video_path':str(path),'manual_target_state':t})
     assert 'CUDA unavailable' in result['error'] and 'reference_depth' not in result
 
 def test_depth_pro_postprocessing_preserves_metric_scale(tmp_path):

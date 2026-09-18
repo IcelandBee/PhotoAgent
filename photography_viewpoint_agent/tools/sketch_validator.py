@@ -5,6 +5,7 @@ from photography_viewpoint_agent.schemas.target import TargetState
 from photography_viewpoint_agent.schemas.rendering import RenderMeta
 from photography_viewpoint_agent.schemas.validation import SketchValidation
 from photography_viewpoint_agent.renderer.viewpoint_warp import rotation_homography, warp_bbox
+from photography_viewpoint_agent.renderer.camera_parameters import rotation_parameters
 from photography_viewpoint_agent.tools.geometry import (
     fit_viewport, contain_subject, transform_bbox_by_viewport, clip_bbox_to_canvas,
     expected_subject_bbox, subject_is_noop,
@@ -29,18 +30,30 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
     framing = sum(abs(a - b) for a, b in zip(expected_viewport, meta.rendered_viewport)) / 4
     passed = framing <= config.framing_threshold
     viewpoint = target.viewpoint
-    if viewpoint.mode in ('depth_3d','depth_mesh') or viewpoint.active:
-        if meta.viewpoint_warp is None or meta.viewpoint_warp.get('parameters') != viewpoint.model_dump():
+    if not passed:
+        messages.append("Framing error exceeds threshold.")
+    backend = config.viewpoint_backend if viewpoint.active else 'none'
+    if (meta.viewpoint_applied != bool(viewpoint.active) or meta.viewpoint_backend != backend or
+            meta.viewpoint_rotation != viewpoint.model_dump(exclude={'mode'}) or
+            tuple(meta.camera_translation) != (0, 0, 0)):
+        passed = False
+        messages.append('Viewpoint execution metadata does not match orientation-only intent/config.')
+    parameters = None
+    if viewpoint.active:
+        parameters = rotation_parameters(viewpoint, config.viewpoint_backend,
+            horizontal_fov_deg=config.viewpoint_horizontal_fov_deg, border_mode=config.viewpoint_border_mode)
+        if meta.viewpoint_warp is None or meta.viewpoint_warp.get('parameters') != parameters.model_dump():
             passed = False
             messages.append('Viewpoint metadata does not match requested transform.')
-        if viewpoint.mode in ('depth_3d','depth_mesh'):
+        if config.needs_reference_depth(viewpoint):
             warp = meta.viewpoint_warp or {}
-            if warp.get('backend') != viewpoint.mode or not 0 < warp.get('valid_fraction',0) <= 1:
+            if warp.get('backend') != config.viewpoint_backend or not 0 < warp.get('valid_fraction',0) <= 1:
                 passed = False
                 messages.append('Missing depth viewpoint coverage/backend metadata.')
             messages.append('Depth coverage is diagnostic; PASS validates geometry plumbing, not novel-view realism.')
-    if not passed:
-        messages.append("Framing error exceeds threshold.")
+    elif meta.viewpoint_warp is not None:
+        passed = False
+        messages.append('Zero rotation must skip viewpoint rendering entirely.')
     position = scale = None
     if meta.subject_mode != target.subject.mode:
         passed = False
@@ -50,12 +63,12 @@ def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
         messages.append("Requested viewport metadata does not match target.")
     if meta.source_subject_bbox is not None:
         source_box = meta.source_subject_bbox
-        if viewpoint.mode in ('depth_3d','depth_mesh'):
+        if config.needs_reference_depth(viewpoint):
             source_box = (meta.viewpoint_warp or {}).get('projected_subject_bbox')
             if target.subject.mode == 'reposition':
                 messages.append('Natural subject projection omitted: background depth repaired; subject rendered independently.')
         elif viewpoint.active and meta.reference_size is not None:
-            h,_,_ = rotation_homography(meta.reference_size,viewpoint)
+            h,_,_ = rotation_homography(meta.reference_size,parameters)
             source_box = warp_bbox(source_box,meta.reference_size,h)
         projected = transform_bbox_by_viewport(source_box, meta.rendered_viewport) if source_box else None
         if not boxes_match(projected, meta.natural_subject_bbox):

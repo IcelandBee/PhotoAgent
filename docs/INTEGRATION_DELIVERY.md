@@ -1,3 +1,5 @@
+> 后续语义收紧：正式 viewpoint 只允许朝向，depth renderer 由配置选择；旧平移输入明确拒绝。见 [TRANSFORM_SEMANTICS](TRANSFORM_SEMANTICS.md)。
+
 # PhotoAgent / Guidance 集成交付记录
 
 > 历史测试/交付记录。当前两个仓库均包含完整上下游源码，安装方式以根目录 README 为准；以下本地路径指向当时的测试产物。

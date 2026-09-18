@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw
 from pydantic import ValidationError
 from photography_viewpoint_agent.schemas.target import TargetState, ViewpointTarget
 from photography_viewpoint_agent.schemas.subject import SubjectObservation
+from photography_viewpoint_agent.renderer.camera_parameters import CameraWarpParameters
 from photography_viewpoint_agent.renderer.viewpoint_warp import RotationViewpointWarper, rotation_homography
 from photography_viewpoint_agent.renderer.target_sketch import TargetSketchRenderer
 
@@ -48,7 +49,7 @@ def test_roll_direction_pixels(sign):
 def test_intrinsics_composition_and_stability():
     previous=None
     for angle in np.linspace(-10,10,81):
-        spec=ViewpointTarget(mode='rotation',yaw_deg=angle,pitch_deg=angle/2,roll_deg=3)
+        spec=CameraWarpParameters(mode='rotation',yaw_deg=angle,pitch_deg=angle/2,roll_deg=3)
         h,k,r=rotation_homography((590,786),spec)
         assert np.isfinite(h).all() and np.linalg.det(r)==pytest.approx(1)
         np.testing.assert_allclose(r.T@r,np.eye(3),atol=1e-12)
@@ -57,10 +58,10 @@ def test_intrinsics_composition_and_stability():
         point=h@np.array([295,393,1]);point=point[:2]/point[2]
         if previous is not None: assert np.linalg.norm(point-previous)<5
         previous=point
-    h,_,_=rotation_homography((590,786),ViewpointTarget(mode='rotation',yaw_deg=5,pitch_deg=-3,roll_deg=2))
-    hy,_,_=rotation_homography((590,786),ViewpointTarget(mode='rotation',yaw_deg=5))
-    hp,_,_=rotation_homography((590,786),ViewpointTarget(mode='rotation',pitch_deg=-3))
-    hr,_,_=rotation_homography((590,786),ViewpointTarget(mode='rotation',roll_deg=2))
+    h,_,_=rotation_homography((590,786),CameraWarpParameters(mode='rotation',yaw_deg=5,pitch_deg=-3,roll_deg=2))
+    hy,_,_=rotation_homography((590,786),CameraWarpParameters(mode='rotation',yaw_deg=5))
+    hp,_,_=rotation_homography((590,786),CameraWarpParameters(mode='rotation',pitch_deg=-3))
+    hr,_,_=rotation_homography((590,786),CameraWarpParameters(mode='rotation',roll_deg=2))
     np.testing.assert_allclose(h,hr@hp@hy,atol=1e-12)
 
 

@@ -1,0 +1,16 @@
+{
+  "subject": {
+    "mode": "follow_reference"
+  },
+  "framing": {
+    "reference_viewport": [
+      0.1,
+      0,
+      1.1,
+      1
+    ]
+  },
+  "viewpoint": {
+    "mode": "none"
+  }
+}

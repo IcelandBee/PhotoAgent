@@ -7,6 +7,21 @@ import math
 import re
 
 
+def validate_viewpoint_intent(viewpoint):
+    """Shared guard for graph input and direct backend calls."""
+    if not isinstance(viewpoint, dict):
+        raise ValueError("viewpoint must be an orientation object")
+    if set(viewpoint) - {"mode", "yaw_deg", "pitch_deg", "roll_deg"}:
+        raise ValueError("viewpoint accepts orientation only: mode/yaw_deg/pitch_deg/roll_deg; no translation or renderer settings")
+    if viewpoint.get("mode", "none") not in ("none", "rotation"):
+        raise ValueError("viewpoint.mode must be none or rotation")
+    angles = [viewpoint.get(axis, 0) for axis in ("yaw_deg", "pitch_deg", "roll_deg")]
+    if any(type(v) not in (int, float) or not math.isfinite(v) or not -15 <= v <= 15 for v in angles):
+        raise ValueError("Viewpoint angles must be finite degrees in [-15, 15]")
+    if viewpoint.get("mode", "none") == "none" and any(angles):
+        raise ValueError("Nonzero angles require viewpoint.mode=rotation")
+
+
 @dataclass(frozen=True)
 class GuideInput:
     video_path: str | Path
@@ -51,8 +66,7 @@ class GuideInput:
             box(subject.get("bbox"), True)
         elif subject.get("bbox") is not None:
             raise ValueError("follow_reference requires bbox=null")
-        if viewpoint.get("mode", "none") not in ("none", "rotation", "depth_3d", "depth_mesh"):
-            raise ValueError("Unknown viewpoint mode")
+        validate_viewpoint_intent(viewpoint)
         if self.session_id is not None and (not isinstance(self.session_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", self.session_id)):
             raise ValueError("Invalid session_id")
         if self.step_id is not None and (type(self.step_id) is not int or self.step_id < 1):

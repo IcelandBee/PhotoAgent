@@ -8,14 +8,16 @@ CPU测试专用的 CpuTriangleOracle 仅用于小型synthetic几何/流程测试
 
 ## 架构与路由
 
-| viewpoint.mode | backend | 深度 |
-| --- | --- | --- |
-| none | 原行为 | 不执行 |
-| rotation | 原Homography | 不执行 |
-| depth_3d | 原PointCloudViewpointWarper / fixed splat / Z-buffer | 默认Depth Anything |
-| depth_mesh | MeshViewpointWarper / edge-aware faces / PyTorch3D | 默认Depth Pro |
+正式 TargetState.viewpoint.mode 仅 none/rotation；renderer 由 AgentConfig.viewpoint_backend 选择。
 
-现有graph保持 planner → 可选detect subject → 可选estimate depth → render → validate。两个depth模式才进入深度节点。`depth_backend=auto` 的默认映射位于配置工厂，不在Graph中写具体模型类；`--depth-backend depth_anything/depth_pro/precomputed` 和 `build_workflow(depth_estimator=...)` 均可覆盖。`--depth-path` 保持优先级，复用旧用法。
+| 非零旋转 | viewpoint_backend | 深度 |
+| --- | --- | --- |
+| 否 | 任意（不调用 renderer） | 不执行 |
+| 是 | homography（默认） | 不执行 |
+| 是 | depth_3d | 默认Depth Anything |
+| 是 | depth_mesh | 默认Depth Pro |
+
+两个 depth backend 在正式 workflow 中只允许 rotation，translation 恒为0。graph 保持 planner → 可选detect subject → 条件estimate depth → render → validate。`depth_backend=auto` 的映射位于工厂；`--depth-backend`、`--depth-path` 和注入 estimator 的用法保留。详见 [语义规范](TRANSFORM_SEMANTICS.md)。
 
 Mesh的CUDA/PyTorch3D预检在深度节点调用估计器之前执行，避免无GPU时先下载大模型。预检运行一个微型GPU三角形，检查扩展是否实际支持CUDA。
 
@@ -36,7 +38,7 @@ DepthObservation显式保存：
 
 每个深度.npy旁保存同名.json完整DepthObservation，含来源、尺度、focal、FoV、推理时间。`--depth-path` 自动读取该sidecar；也可用 `--depth-metadata-path` 指定。迁移到服务器时，应同时复制.npy和.json；内部旧depth_path不会覆盖实际传入的.npy路径。没有sidecar的旧.npy仍解释成relative Z，不能把无sidecar的米制深度误当成relative。
 
-## 内参与位移
+## 内参与位移（保留低层 R+t，正式平移固定为0）
 
 优先使用observation.metadata.focal_length_px，记录 `intrinsics_source=depth_pro`；没有estimated focal时按TargetState.horizontal_fov_deg回退，并记录 `manual_fov`。无效focal、已知宽度不匹配明确拒绝，不静默回退。K仍为fx=fy=f、cx=W/2、cy=H/2。
 
@@ -106,7 +108,7 @@ requirements-mesh.txt固定已检查可用的Transformers 4.57.6，加构建辅�
 
 ```bash
 python app.py --video /data/ski.mp4 \
-  --target-state examples/61_depthmesh__translate_right_small.json \
+  --target-state examples/viewpoint_yaw_right.json --viewpoint-backend depth_mesh \
   --depth-backend depth_pro --depth-model apple/DepthPro-hf \
   --depth-device cuda --mesh-device cuda --mesh-stride 2 \
   --mesh-depth-edge-threshold 0.12 --debug --work-dir workdir/mesh_right
@@ -116,7 +118,7 @@ python app.py --video /data/ski.mp4 \
 
 ```bash
 python app.py --video /data/ski.mp4 \
-  --target-state examples/63_combined__depthmesh__zoom_in__subject_right.json \
+  --target-state examples/framing_plus_subject_plus_yaw.json --viewpoint-backend depth_mesh \
   --depth-path workdir/mesh_right/reference_depth.npy \
   --mesh-device cuda --device cuda --debug --work-dir workdir/mesh_combined
 ```
@@ -129,7 +131,7 @@ python app.py --video /data/ski.mp4 \
 python tools/run_mesh_acceptance.py --video /data/ski.mp4 --output-dir workdir/mesh_server_acceptance
 ```
 
-该脚本运行none、rotation、旧point、mesh右移、mesh前移、mesh+viewport+人物，全部调用app.py。首次mesh使用真实Depth Pro，后两例复用同一参考帧的metric深度；脚本不会冒充CPU执行GPU验收。
+该脚本运行none、homography yaw、point yaw、mesh yaw、mesh pitch、mesh+viewport+人物，全部调用app.py。首次mesh使用真实Depth Pro，后两例复用同一参考帧的metric深度；脚本不会冒充CPU执行GPU验收。
 
 ## 同深度 point vs mesh A/B
 
@@ -156,7 +158,9 @@ result.json引用当前主机的绝对路径；搬迁结果目录后需修正这
 
 裁面计数按invalid→depth edge→subject region排他计数，便于求和；另记camera-plane裁面。Depth Pro metadata单独记录模型加载、推理与后处理时间；depth node还记录整个estimator耗时。Mesh计时不包含深度估计（独立记录）与最终viewport/人物合成。
 
-## CPU实际验证与待GPU验证
+## 历史 CPU 验证与待GPU验证
+
+本节保留重构前实验记录，平移 workflow 已迁至研究区域；当前语义与回归结果见 TRANSFORM_REFACTOR_DELIVERY.md。
 
 本机：192项通过、11项GPU测试跳过（跳过原因显式显示）。
 
@@ -182,11 +186,11 @@ result.json引用当前主机的绝对路径；搬迁结果目录后需修正这
 
 ## 参数与限制
 
-首轮建议stride2、threshold .12，yaw/pitch±3°起步，translation±.02～.05，roll±2°。之后按用户建议范围逐步增加，GPU高质量对照可用stride1。阈值越小，断层切得越保守，也可能破坏斜坡连续面；full-resolution edge guard有意扩大断层附近留白。
+首轮建议stride2、threshold .12，yaw/pitch±3°起步，roll±2°。translation 仅在独立低层研究入口允许，正式流程固定为0。之后按用户建议范围逐步增加，GPU高质量对照可用stride1。阈值越小，断层切得越保守，也可能破坏斜坡连续面；full-resolution edge guard有意扩大断层附近留白。
 
 这仍是单帧2.5D：隐藏表面不存在、估计depth/focal会错、薄结构可能被切掉、vertex RGB在stride>1时丢高频细节、人物独立合成不生成新姿态。严禁以crop/zoom/大范围replicate来隐藏这些问题。
 
-## 新增/修改文件清单
+## 历史实现文件清单（旧示例已迁移研究目录）
 
 新增：
 - photography_viewpoint_agent/depth_estimation/storage.py、depth_pro.py、factory.py

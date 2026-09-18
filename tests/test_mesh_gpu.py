@@ -5,7 +5,7 @@ import pytest
 import torch
 from PIL import Image
 from photography_viewpoint_agent.schemas.depth import DepthObservation
-from photography_viewpoint_agent.schemas.target import ViewpointTarget
+from photography_viewpoint_agent.renderer.camera_parameters import CameraWarpParameters
 from photography_viewpoint_agent.renderer.mesh_warp import MeshViewpointWarper
 
 pytestmark=pytest.mark.skipif(not torch.cuda.is_available() or importlib.util.find_spec('pytorch3d') is None,
@@ -21,7 +21,7 @@ def make_case():
 @pytest.mark.parametrize('stride',[1,2])
 def test_gpu_flat_identity(stride):
     im,d,obs=make_case()
-    out,meta,valid=MeshViewpointWarper(stride=stride).warp(im,d,ViewpointTarget(mode='depth_mesh'),obs)
+    out,meta,valid=MeshViewpointWarper(stride=stride).warp(im,d,CameraWarpParameters(mode='depth_mesh'),obs)
     assert valid.mean()>.98
     assert np.abs(np.asarray(out).astype(float)[valid]-np.asarray(im)[valid]).mean()<1.5
     assert meta['rasterizer']=='PyTorch3DRasterizer'
@@ -29,14 +29,14 @@ def test_gpu_flat_identity(stride):
 
 def test_gpu_flat_translation_no_pinholes():
     im,d,obs=make_case()
-    out,meta,valid=MeshViewpointWarper().warp(im,d,ViewpointTarget(mode='depth_mesh',translation_x=.04),obs)
+    out,meta,valid=MeshViewpointWarper().warp(im,d,CameraWarpParameters(mode='depth_mesh',translation_x=.04),obs)
     assert valid[3:-3,3:-6].all()
     assert not valid[:,-1].any()
 
 
 def test_gpu_depth_discontinuity_leaves_hole():
     im,d,obs=make_case();d[:,32:]=5
-    out,meta,valid=MeshViewpointWarper().warp(im,d,ViewpointTarget(mode='depth_mesh',translation_x=.08),obs)
+    out,meta,valid=MeshViewpointWarper().warp(im,d,CameraWarpParameters(mode='depth_mesh',translation_x=.08),obs)
     assert meta['num_removed_depth_edge_faces']>0
     assert not valid[20:25,29:31].any()
     assert np.all(np.asarray(out)[~valid]==128)
@@ -58,7 +58,7 @@ def test_gpu_zbuffer_and_perspective_colors():
 def test_gpu_camera_directions(axis,amount,direction):
     im,d,obs=make_case()
     a=np.zeros((48,64,3),np.uint8);a[20:29,28:37]=255
-    out,meta,valid=MeshViewpointWarper(stride=1).warp(Image.fromarray(a),d,ViewpointTarget(mode='depth_mesh',**{axis:amount}),obs)
+    out,meta,valid=MeshViewpointWarper(stride=1).warp(Image.fromarray(a),d,CameraWarpParameters(mode='depth_mesh',**{axis:amount}),obs)
     y,x=np.where(np.asarray(out)[:,:,0]>220)
     displacement=y.mean()-24 if axis=='pitch_deg' else x.mean()-32
     assert displacement*direction>1

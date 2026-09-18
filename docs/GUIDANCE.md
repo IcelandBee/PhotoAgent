@@ -19,7 +19,7 @@ python -m pytest -q
 
 输入：`video_path`、`current_frame`、`reference_frame`、`target_sketch`、完整 JSON `target_state`、`render_meta`。
 图片与视频字段为本地路径。可选 `session_id`、正整数 `step_id`、`video_url`，另需 `session_directory` 指定归档目录。
-下游 dataclass/TypedDict 保持独立，不导入上游 AgentState 或 Pydantic 模型。新模式的扩面、padding、人物 bbox、rotation、depth_3d、depth_mesh 元数据原样传递。
+下游 dataclass/TypedDict 保持独立，不导入上游 AgentState 或 Pydantic 模型。扩面、padding、人物 bbox、rotation 意图原样传递；depth_3d/depth_mesh 仅作为渲染诊断，不是 viewpoint.mode。Guidance graph 和直接 backend 调用均拒绝平移字段（包括0）及旧 depth mode。Prompt 禁止仅凭 viewport shift 推断物理平移，详见 [Transform 语义](TRANSFORM_SEMANTICS.md)。
 
 ```python
 import json

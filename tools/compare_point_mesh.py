@@ -28,15 +28,16 @@ def main(argv=None):
     subject=SubjectObservation.model_validate(data['reference_subject']) if data.get('reference_subject') else None
     target=TargetState.model_validate(data['target_state'])
     with Image.open(data['target_sketch_path']) as im:size=im.size
-    renderer=TargetSketchRenderer(*size,debug=True,mesh_device=args.mesh_device,
-        mesh_stride=args.mesh_stride,mesh_depth_edge_threshold=args.mesh_depth_edge_threshold)
-    renderer.preflight('depth_mesh')
+    if not target.viewpoint.active:
+        raise ValueError('A/B rotation comparison requires nonzero yaw/pitch/roll')
     if args.output_dir.exists() and any(args.output_dir.iterdir()):raise ValueError('Output directory must be empty')
     args.output_dir.mkdir(parents=True,exist_ok=True)
     records={}
     for name,mode in [('point','depth_3d'),('mesh','depth_mesh')]:
-        candidate=target.model_dump();candidate['viewpoint'].update(mode=mode,border_mode='constant')
-        state=TargetState.model_validate(candidate)
+        renderer=TargetSketchRenderer(*size,debug=True,viewpoint_backend=mode,mesh_device=args.mesh_device,
+            mesh_stride=args.mesh_stride,mesh_depth_edge_threshold=args.mesh_depth_edge_threshold)
+        renderer.preflight(mode)
+        state=target
         path,meta=renderer.render(frame,subject,state,args.output_dir/name/'target_sketch.jpg',reference_depth=depth)
         records[name]={'path':path,'render_meta':meta.model_dump(),'target_state':state.model_dump()}
     panel_w=640;panel_h=round(panel_w*size[1]/size[0]);header=40

@@ -3,9 +3,7 @@
     "mode": "rotation",
     "yaw_deg": 5,
     "pitch_deg": 0,
-    "roll_deg": 0,
-    "horizontal_fov_deg": 60,
-    "border_mode": "constant"
+    "roll_deg": 0
   },
   "framing": {
     "reference_viewport": [

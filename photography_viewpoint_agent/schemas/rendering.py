@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import Field
 from .base import NormalizedBox, ViewportBox, Schema
 from .target import SubjectMode
@@ -7,6 +7,11 @@ PixelCount = Annotated[int, Field(ge=0, strict=True)]
 
 
 class RenderMeta(Schema):
+    viewpoint_applied: bool = False
+    viewpoint_backend: Literal['none', 'homography', 'depth_3d', 'depth_mesh'] = 'none'
+    viewpoint_rotation: dict[str, float] = Field(default_factory=lambda: {
+        'yaw_deg': 0, 'pitch_deg': 0, 'roll_deg': 0})
+    camera_translation: tuple[Literal[0], Literal[0], Literal[0]] = (0, 0, 0)
     viewpoint_warp: dict | None = None
     rendered_viewport: ViewportBox
     requested_viewport: ViewportBox | None = None

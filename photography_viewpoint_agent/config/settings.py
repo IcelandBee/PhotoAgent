@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-from pydantic import Field
+from pydantic import Field, model_validator
 from photography_viewpoint_agent.schemas.base import Schema
 
 ColorChannel = Annotated[int, Field(ge=0, le=255, strict=True)]
@@ -14,6 +14,10 @@ class AgentConfig(Schema):
     yolo_model: str = "yolo11n-seg.pt"
     person_confidence: float = Field(default=0.4, gt=0, le=1)
     device: str = "cpu"
+    # Implementation choice, never a Planner/TargetState intent.
+    viewpoint_backend: Literal['homography', 'depth_3d', 'depth_mesh'] = 'homography'
+    viewpoint_horizontal_fov_deg: float = Field(default=60, ge=10, le=150)
+    viewpoint_border_mode: Literal['constant', 'replicate'] = 'constant'
     depth_model: str | None = None
     depth_backend: Literal['auto','depth_anything','depth_pro','precomputed'] = 'auto'
     depth_path: str | None = None
@@ -31,3 +35,12 @@ class AgentConfig(Schema):
     subject_scale_threshold: float = Field(default=0.05, ge=0)
     framing_threshold: float = Field(default=0.03, ge=0)
     work_dir: str = "./workdir"
+
+    @model_validator(mode='after')
+    def validate_viewpoint_backend(self):
+        if self.viewpoint_backend == 'depth_mesh' and self.viewpoint_border_mode != 'constant':
+            raise ValueError('depth_mesh requires constant fill')
+        return self
+
+    def needs_reference_depth(self, viewpoint) -> bool:
+        return bool(viewpoint.active and self.viewpoint_backend in ('depth_3d', 'depth_mesh'))

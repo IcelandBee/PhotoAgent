@@ -5,6 +5,7 @@ import pytest
 from PIL import Image, ImageDraw
 from pydantic import ValidationError
 from photography_viewpoint_agent.schemas.target import ViewpointTarget,TargetState
+from photography_viewpoint_agent.renderer.camera_parameters import CameraWarpParameters
 from photography_viewpoint_agent.schemas.subject import SubjectObservation
 from photography_viewpoint_agent.config.settings import AgentConfig
 from photography_viewpoint_agent.depth_estimation.monocular import normalize_depth,PrecomputedDepthEstimator,save_observation
@@ -15,7 +16,7 @@ from photography_viewpoint_agent.app import main
 
 
 def vp(**kwargs):
-    return ViewpointTarget(mode='depth_3d',**kwargs)
+    return CameraWarpParameters(mode='depth_3d',**kwargs)
 
 
 def test_normalization_invalid_and_precomputed(tmp_path):
@@ -29,7 +30,7 @@ def test_normalization_invalid_and_precomputed(tmp_path):
 @pytest.mark.parametrize('mode',['none','rotation'])
 def test_translations_require_depth(mode):
     with pytest.raises(ValidationError):ViewpointTarget(mode=mode,translation_x=.03)
-    assert ViewpointTarget(mode=mode).translation_x==0
+    assert not hasattr(ViewpointTarget(mode=mode), 'translation_x')
 
 
 @pytest.mark.parametrize('field,value',[('translation_z',float('nan')),('translation_x',.3),('pitch_deg',16)])
@@ -118,9 +119,9 @@ def test_complete_graph_conditional_depth(tmp_path,mode,subject_mode):
     estimator,detector=Depth(),Detector()
     data={'subject':{'mode':subject_mode},'framing':{'reference_viewport':[.1,.1,.9,.9]}}
     if subject_mode=='reposition':data['subject']['bbox']=[.6,.2,.85,.9]
-    if mode:data['viewpoint']={'mode':mode,'yaw_deg':3,**({'translation_x':.03} if mode=='depth_3d' else {})}
+    if mode:data['viewpoint']={'mode':'rotation','yaw_deg':3}
     out=tmp_path/'run'
-    state=build_workflow(AgentConfig(work_dir=str(out),target_width=64,target_height=48,debug=True),
+    state=build_workflow(AgentConfig(work_dir=str(out),target_width=64,target_height=48,debug=True,viewpoint_backend='depth_3d' if mode=='depth_3d' else 'homography'),
         detector=detector,depth_estimator=estimator).invoke({'video_path':str(path),'manual_target_state':TargetState.model_validate(data)})
     assert not state.get('error'),state.get('error')
     assert state['validation'].passed,state['validation'].messages
@@ -138,7 +139,7 @@ def test_complete_graph_conditional_depth(tmp_path,mode,subject_mode):
 def test_precomputed_cli_and_failure(tmp_path):
     video=tmp_path/'video.avi';make_video(video)
     depth=tmp_path/'depth.npy';np.save(depth,np.ones((48,64)))
-    args=['--video',str(video),'--target-state','examples/51_depth3d__translate_right_small.json',
+    args=['--video',str(video),'--target-state','examples/viewpoint_yaw_right.json','--viewpoint-backend','depth_3d',
           '--depth-path',str(depth),'--target-width','64','--target-height','48']
     assert main(args+['--work-dir',str(tmp_path/'good')])==0
     np.save(depth,np.ones((3,3)))

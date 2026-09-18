@@ -8,7 +8,7 @@ This defines fixed sequential ray rotations, not interchangeable Euler orders.
 import cv2
 import numpy as np
 from PIL import Image
-from photography_viewpoint_agent.schemas.target import ViewpointTarget
+from photography_viewpoint_agent.renderer.camera_parameters import CameraWarpParameters
 
 
 def rotation_matrix(viewpoint):
@@ -53,7 +53,7 @@ def warp_bbox(box, size, homography):
 class RotationViewpointWarper:
     def warp(self, image, yaw_deg=0.0, pitch_deg=0.0, roll_deg=0.0,
              horizontal_fov_deg=60.0, border_mode='constant', fill_color=(128,128,128)):
-        viewpoint = ViewpointTarget(mode='rotation',yaw_deg=yaw_deg,pitch_deg=pitch_deg,
+        viewpoint = CameraWarpParameters(mode='rotation',yaw_deg=yaw_deg,pitch_deg=pitch_deg,
             roll_deg=roll_deg,horizontal_fov_deg=horizontal_fov_deg,border_mode=border_mode)
         h, k, r = rotation_homography(image.size, viewpoint)
         source = image.convert('RGB')

@@ -41,17 +41,16 @@ def test_handoff_rejects_failed_generation(package_state, change):
         build_target_package({**package_state, **change})
 
 
-@pytest.mark.parametrize("mode", ["none", "rotation", "depth_3d", "depth_mesh"])
+@pytest.mark.parametrize("mode", ["none", "homography", "depth_3d", "depth_mesh"])
 def test_full_viewpoint_metadata_survives(package_state, tmp_path, mode):
     target = package_state["target_state"].model_dump(mode="json")
     target["subject"] = {"mode": "reposition", "bbox": [.1, .2, .5, .9]}
     target["framing"]["reference_viewport"] = [-.2, -.1, 1.2, 1.1]
-    target["viewpoint"]["mode"] = mode
-    if mode.startswith("depth"):
-        target["viewpoint"]["translation_x"] = .1
+    target["viewpoint"]["mode"] = "none" if mode == "none" else "rotation"
+    target["viewpoint"]["yaw_deg"] = 0 if mode == "none" else 5
     package_state["target_state"] = TargetState.model_validate(target)
     package_state["render_meta"] = RenderMeta(rendered_viewport=(-.2, -.1, 1.2, 1.1),
-        padding=(10, 10, 10, 10), subject_mode="reposition", viewpoint_warp={"mode": mode, "custom": [1, 2, 3]})
+        padding=(10, 10, 10, 10), subject_mode="reposition", viewpoint_backend=mode, viewpoint_warp={"mode": mode, "custom": [1, 2, 3]})
     payload = to_guide_input(build_target_package(package_state), tmp_path / "session")
     assert payload["target_state"] == target
     assert payload["render_meta"]["viewpoint_warp"]["custom"] == [1, 2, 3]
@@ -139,3 +138,15 @@ def test_parent_checkpoint_resumes_guidance_without_regenerating(package_state, 
     result = graph.invoke(None, config)
     assert result["guidance"]["phase"] == "reached"
     assert generator.calls == backend.calls == 1
+
+
+@pytest.mark.parametrize('field', ['translation_x', 'translation_y', 'translation_z'])
+def test_handoff_rejects_legacy_translation(package_state, tmp_path, field):
+    package = build_target_package(package_state)
+    data = package_state['target_state'].model_dump()
+    data['viewpoint'][field] = 0
+    with pytest.raises(ValueError, match=field):
+        build_target_package({**package_state, 'target_state': data})
+    invalid = package.model_copy(update={'target_state': data})
+    with pytest.raises(ValueError, match=field):
+        to_guide_input(invalid, tmp_path / 'session')

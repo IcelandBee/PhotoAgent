@@ -52,7 +52,9 @@ def build_workflow(config: AgentConfig | None = None, *,
         config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug,
         subject_noop_position_threshold=config.subject_noop_position_threshold,
         subject_noop_scale_threshold=config.subject_noop_scale_threshold,splat_radius=config.splat_radius,
-        mesh_stride=config.mesh_stride,mesh_depth_edge_threshold=config.mesh_depth_edge_threshold,mesh_device=config.mesh_device)
+        mesh_stride=config.mesh_stride,mesh_depth_edge_threshold=config.mesh_depth_edge_threshold,mesh_device=config.mesh_device,
+        viewpoint_backend=config.viewpoint_backend, viewpoint_horizontal_fov_deg=config.viewpoint_horizontal_fov_deg,
+        viewpoint_border_mode=config.viewpoint_border_mode)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),
@@ -81,7 +83,7 @@ def build_workflow(config: AgentConfig | None = None, *,
     def route_depth(state: AgentState):
         if state.get('error'):
             return END
-        return 'estimate_reference_depth' if state['target_state'].viewpoint.mode in ('depth_3d','depth_mesh') else 'render_target_sketch'
+        return 'estimate_reference_depth' if config.needs_reference_depth(state['target_state'].viewpoint) else 'render_target_sketch'
 
     graph.add_conditional_edges("composition_planner", route_subject,
         {END: END, "detect_reference_subject": "detect_reference_subject", "render_target_sketch": "render_target_sketch",

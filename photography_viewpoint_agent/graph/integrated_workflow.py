@@ -7,6 +7,7 @@ from photography_viewpoint_agent.graph.workflow import build_workflow
 from photography_viewpoint_agent.integration.guidance_adapter import build_target_package, to_guide_input
 from photography_viewpoint_agent.schemas.handoff import TargetPackage
 from photography_viewpoint_agent.schemas.target import TargetState
+from photography_viewpoint_agent.tools.plan_validator import validate_plan
 
 
 class IntegratedInput(TypedDict):
@@ -50,7 +51,7 @@ def build_integrated_workflow(config: AgentConfig | None = None, *, backend=None
             config.model_copy(update={"work_dir": str(generation)}), **target_dependencies)
         generated = generator.invoke({
             "video_path": str(Path(state["video_path"]).resolve()),
-            "manual_target_state": TargetState.model_validate(state["manual_target_state"]),
+            "manual_target_state": validate_plan(state["manual_target_state"]),
             "error": None,
         })
         package = build_target_package(generated)
