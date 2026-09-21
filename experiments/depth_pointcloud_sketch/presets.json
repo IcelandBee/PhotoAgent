@@ -1,0 +1,12 @@
+{
+  "crop_forward": {"group":"crop", "semantic_direction":"camera forward", "translation":{"x":0,"y":0,"z":0.05}, "rotation":{"yaw_deg":0,"pitch_deg":0,"roll_deg":0}, "focal_scale":1.0},
+  "crop_forward_pitch_down": {"group":"crop", "semantic_direction":"camera forward, pitch down", "translation":{"x":0,"y":0,"z":0.05}, "rotation":{"yaw_deg":0,"pitch_deg":-5,"roll_deg":0}, "focal_scale":1.0},
+  "crop_forward_zoom_in": {"group":"crop", "semantic_direction":"camera forward, narrower target FOV", "translation":{"x":0,"y":0,"z":0.05}, "rotation":{"yaw_deg":0,"pitch_deg":0,"roll_deg":0}, "focal_scale":1.1},
+  "expand_backward": {"group":"expand", "semantic_direction":"camera backward", "translation":{"x":0,"y":0,"z":-0.05}, "rotation":{"yaw_deg":0,"pitch_deg":0,"roll_deg":0}, "focal_scale":1.0},
+  "expand_backward_wide": {"group":"expand", "semantic_direction":"camera backward, wider target FOV", "translation":{"x":0,"y":0,"z":-0.05}, "rotation":{"yaw_deg":0,"pitch_deg":0,"roll_deg":0}, "focal_scale":0.9},
+  "expand_up_pitch_down_wide": {"group":"expand", "semantic_direction":"camera up, pitch down, wider target FOV", "translation":{"x":0,"y":0.05,"z":0}, "rotation":{"yaw_deg":0,"pitch_deg":-8,"roll_deg":0}, "focal_scale":0.9},
+  "view_up_pitch_down": {"group":"viewpoint", "semantic_direction":"camera up, pitch down", "translation":{"x":0,"y":0.05,"z":0}, "rotation":{"yaw_deg":0,"pitch_deg":-8,"roll_deg":0}, "focal_scale":1.0},
+  "view_down_pitch_up": {"group":"viewpoint", "semantic_direction":"camera down, pitch up", "translation":{"x":0,"y":-0.05,"z":0}, "rotation":{"yaw_deg":0,"pitch_deg":8,"roll_deg":0}, "focal_scale":1.0},
+  "view_right_yaw_left": {"group":"viewpoint", "semantic_direction":"camera right, yaw left", "translation":{"x":0.05,"y":0,"z":0}, "rotation":{"yaw_deg":-8,"pitch_deg":0,"roll_deg":0}, "focal_scale":1.0},
+  "view_left_yaw_right": {"group":"viewpoint", "semantic_direction":"camera left, yaw right", "translation":{"x":-0.05,"y":0,"z":0}, "rotation":{"yaw_deg":8,"pitch_deg":0,"roll_deg":0}, "focal_scale":1.0}
+}

@@ -10,16 +10,21 @@ import re
 def validate_viewpoint_intent(viewpoint):
     """Shared guard for graph input and direct backend calls."""
     if not isinstance(viewpoint, dict):
-        raise ValueError("viewpoint must be an orientation object")
-    if set(viewpoint) - {"mode", "yaw_deg", "pitch_deg", "roll_deg"}:
-        raise ValueError("viewpoint accepts orientation only: mode/yaw_deg/pitch_deg/roll_deg; no translation or renderer settings")
-    if viewpoint.get("mode", "none") not in ("none", "rotation"):
-        raise ValueError("viewpoint.mode must be none or rotation")
+        raise ValueError("viewpoint must be a camera object")
+    if set(viewpoint) - {"mode", "yaw_deg", "pitch_deg", "roll_deg", "translation_x", "translation_y", "translation_z"}:
+        raise ValueError("viewpoint contains unsupported camera fields")
+    if viewpoint.get("mode", "none") not in ("none", "rotation", "camera"):
+        raise ValueError("viewpoint.mode must be none, rotation or camera")
     angles = [viewpoint.get(axis, 0) for axis in ("yaw_deg", "pitch_deg", "roll_deg")]
     if any(type(v) not in (int, float) or not math.isfinite(v) or not -15 <= v <= 15 for v in angles):
         raise ValueError("Viewpoint angles must be finite degrees in [-15, 15]")
     if viewpoint.get("mode", "none") == "none" and any(angles):
         raise ValueError("Nonzero angles require viewpoint.mode=rotation")
+    translation = [viewpoint.get(axis, 0) for axis in ('translation_x', 'translation_y', 'translation_z')]
+    if any(type(v) not in (int, float) or not math.isfinite(v) or not -.2 <= v <= .2 for v in translation):
+        raise ValueError('viewpoint translation must be finite and within [-0.2, 0.2]')
+    if any(translation) and viewpoint.get('mode', 'none') != 'camera':
+        raise ValueError('viewpoint translation requires mode=camera')
 
 
 @dataclass(frozen=True)
@@ -48,8 +53,8 @@ class GuideInput:
         viewpoint = self.target_state.get("viewpoint", {})
         if not all(isinstance(value, dict) for value in (subject, framing, viewpoint)):
             raise ValueError("subject/framing/viewpoint must be JSON objects")
-        if subject.get("mode") not in ("follow_reference", "reposition"):
-            raise ValueError("target_state.subject.mode is required")
+        if subject.get("mode") != "follow_reference":
+            raise ValueError("target_state.subject.mode must be follow_reference; scene geometry is fixed")
         def box(value, normalized=False):
             if not isinstance(value, (list, tuple)) or len(value) != 4 or any(
                 type(v) not in (int, float) or not math.isfinite(v) for v in value
@@ -62,10 +67,11 @@ class GuideInput:
         padding = self.render_meta.get("padding", [0, 0, 0, 0])
         if not isinstance(padding, (list, tuple)) or len(padding) != 4 or any(type(v) is not int or v < 0 for v in padding):
             raise ValueError("padding must contain four nonnegative pixel counts")
-        if subject["mode"] == "reposition":
-            box(subject.get("bbox"), True)
-        elif subject.get("bbox") is not None:
+        if subject.get("bbox") is not None:
             raise ValueError("follow_reference requires bbox=null")
+        focal = framing.get('focal_scale', 1)
+        if type(focal) not in (int, float) or not math.isfinite(focal) or not .5 <= focal <= 2:
+            raise ValueError('framing.focal_scale must be within [0.5, 2]')
         validate_viewpoint_intent(viewpoint)
         if self.session_id is not None and (not isinstance(self.session_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", self.session_id)):
             raise ValueError("Invalid session_id")

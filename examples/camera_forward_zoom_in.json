@@ -1,0 +1,5 @@
+{
+  "subject": {"mode": "follow_reference"},
+  "framing": {"reference_viewport": [0, 0, 1, 1], "focal_scale": 1.1},
+  "viewpoint": {"mode": "camera", "translation_z": 0.05}
+}

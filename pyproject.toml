@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photography-viewpoint-agent"
-version = "0.3.0"
+version = "0.4.0"
 requires-python = ">=3.11"
 dynamic = ["dependencies"]
 
@@ -19,7 +19,7 @@ photo-agent = "photography_viewpoint_agent.app:main"
 video-guide = "video_guide.cli:main"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "experiments/depth_pointcloud_sketch"]
 pythonpath = ["."]
 
 [project.optional-dependencies]

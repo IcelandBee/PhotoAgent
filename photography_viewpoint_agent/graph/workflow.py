@@ -9,9 +9,6 @@ from photography_viewpoint_agent.planners.base import CompositionPlanner
 from photography_viewpoint_agent.planners.manual import ManualCompositionPlanner
 from photography_viewpoint_agent.renderer.base import SketchRenderer
 from photography_viewpoint_agent.renderer.target_sketch import TargetSketchRenderer
-from photography_viewpoint_agent.subject_detection.base import SubjectDetector
-from photography_viewpoint_agent.subject_detection.yolo import YOLOSubjectDetector
-from photography_viewpoint_agent.nodes.detect_reference_subject import detect_reference_subject
 from photography_viewpoint_agent.nodes.load_video import load_video
 from photography_viewpoint_agent.nodes.extract_frames import extract_frames
 from photography_viewpoint_agent.nodes.select_reference import select_reference_frame
@@ -40,31 +37,23 @@ def guarded(name, function):
 def build_workflow(config: AgentConfig | None = None, *,
                    selector: ReferenceSelector | None = None,
                    planner: CompositionPlanner | None = None,
-                   detector: SubjectDetector | None = None,
                    depth_estimator: DepthEstimator | None = None,
                    renderer: SketchRenderer | None = None):
     config = config or AgentConfig()
     selector = selector if selector is not None else RandomReferenceSelector(config.random_seed)
     planner = planner if planner is not None else ManualCompositionPlanner()
-    detector = detector if detector is not None else YOLOSubjectDetector(
-        config.yolo_model, config.person_confidence, config.device)
     renderer = renderer if renderer is not None else TargetSketchRenderer(
         config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug,
-        subject_noop_position_threshold=config.subject_noop_position_threshold,
-        subject_noop_scale_threshold=config.subject_noop_scale_threshold,splat_radius=config.splat_radius,
-        mesh_stride=config.mesh_stride,mesh_depth_edge_threshold=config.mesh_depth_edge_threshold,mesh_device=config.mesh_device,
-        viewpoint_backend=config.viewpoint_backend, viewpoint_horizontal_fov_deg=config.viewpoint_horizontal_fov_deg,
-        viewpoint_border_mode=config.viewpoint_border_mode)
+        splat_radius=config.splat_radius, viewpoint_horizontal_fov_deg=config.viewpoint_horizontal_fov_deg)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),
         "select_reference_frame": partial(select_reference_frame, selector=selector, config=config),
         "get_current_frame": partial(get_current_frame, config=config),
-        "detect_reference_subject": partial(detect_reference_subject, detector=detector, config=config),
         "composition_planner": partial(composition_planner, planner=planner),
         "render_target_sketch": partial(render_target_sketch, renderer=renderer, config=config),
         "validate_sketch": partial(validate_sketch, config=config),
-        "estimate_reference_depth": partial(estimate_reference_depth, estimator=depth_estimator, config=config,renderer=renderer),
+        "estimate_reference_depth": partial(estimate_reference_depth, estimator=depth_estimator, config=config),
     }
     graph = StateGraph(AgentState)
     for name, function in nodes.items():
@@ -75,21 +64,7 @@ def build_workflow(config: AgentConfig | None = None, *,
     graph.add_edge("extract_frames", "get_current_frame")
     graph.add_edge(["select_reference_frame", "get_current_frame"], "composition_planner")
 
-    def route_subject(state: AgentState):
-        if state.get("error"):
-            return END
-        return "detect_reference_subject" if state["target_state"].subject.mode == "reposition" else route_depth(state)
-
-    def route_depth(state: AgentState):
-        if state.get('error'):
-            return END
-        return 'estimate_reference_depth' if config.needs_reference_depth(state['target_state'].viewpoint) else 'render_target_sketch'
-
-    graph.add_conditional_edges("composition_planner", route_subject,
-        {END: END, "detect_reference_subject": "detect_reference_subject", "render_target_sketch": "render_target_sketch",
-         'estimate_reference_depth':'estimate_reference_depth'})
-    graph.add_conditional_edges('detect_reference_subject',route_depth,
-        {END:END,'estimate_reference_depth':'estimate_reference_depth','render_target_sketch':'render_target_sketch'})
+    graph.add_edge('composition_planner', 'estimate_reference_depth')
     graph.add_edge('estimate_reference_depth','render_target_sketch')
     graph.add_edge("render_target_sketch", "validate_sketch")
     graph.add_edge("validate_sketch", END)

@@ -1,149 +1,53 @@
-import math
+"""Validate camera intent and artifact integrity, not novel-view visual accuracy."""
+import numpy as np
 from PIL import Image
-from photography_viewpoint_agent.config.settings import AgentConfig
-from photography_viewpoint_agent.schemas.target import TargetState
-from photography_viewpoint_agent.schemas.rendering import RenderMeta
+from photography_viewpoint_agent.camera_rendering.intent import camera_from_target
 from photography_viewpoint_agent.schemas.validation import SketchValidation
-from photography_viewpoint_agent.renderer.viewpoint_warp import rotation_homography, warp_bbox
-from photography_viewpoint_agent.renderer.camera_parameters import rotation_parameters
-from photography_viewpoint_agent.tools.geometry import (
-    fit_viewport, contain_subject, transform_bbox_by_viewport, clip_bbox_to_canvas,
-    expected_subject_bbox, subject_is_noop,
-)
 
 
-def boxes_match(left, right, tolerance=1e-8):
-    if left is None or right is None:
-        return left is None and right is None
-    return all(abs(a-b) <= tolerance for a,b in zip(left,right))
-
-
-def validate_sketch(target: TargetState, meta: RenderMeta, path: str,
-                    config: AgentConfig) -> SketchValidation:
-    messages = []
-    expected_viewport = target.framing.reference_viewport
-    if meta.reference_size is not None:
-        expected_viewport, _ = fit_viewport(expected_viewport, meta.reference_size,
-                                             (config.target_width, config.target_height))
-        if any(abs(a-b) > 1e-8 for a,b in zip(expected_viewport, target.framing.reference_viewport)):
-            messages.append("Viewport was aspect-fitted around its center; framing error uses the fitted viewport.")
-    framing = sum(abs(a - b) for a, b in zip(expected_viewport, meta.rendered_viewport)) / 4
-    passed = framing <= config.framing_threshold
-    viewpoint = target.viewpoint
-    if not passed:
-        messages.append("Framing error exceeds threshold.")
-    backend = config.viewpoint_backend if viewpoint.active else 'none'
-    if (meta.viewpoint_applied != bool(viewpoint.active) or meta.viewpoint_backend != backend or
-            meta.viewpoint_rotation != viewpoint.model_dump(exclude={'mode'}) or
-            tuple(meta.camera_translation) != (0, 0, 0)):
-        passed = False
-        messages.append('Viewpoint execution metadata does not match orientation-only intent/config.')
-    parameters = None
-    if viewpoint.active:
-        parameters = rotation_parameters(viewpoint, config.viewpoint_backend,
-            horizontal_fov_deg=config.viewpoint_horizontal_fov_deg, border_mode=config.viewpoint_border_mode)
-        if meta.viewpoint_warp is None or meta.viewpoint_warp.get('parameters') != parameters.model_dump():
+def validate_sketch(target, meta, path, config):
+    messages, passed = [], True
+    def require(condition, message):
+        nonlocal passed
+        if not condition:
             passed = False
-            messages.append('Viewpoint metadata does not match requested transform.')
-        if config.needs_reference_depth(viewpoint):
-            warp = meta.viewpoint_warp or {}
-            if warp.get('backend') != config.viewpoint_backend or not 0 < warp.get('valid_fraction',0) <= 1:
-                passed = False
-                messages.append('Missing depth viewpoint coverage/backend metadata.')
-            messages.append('Depth coverage is diagnostic; PASS validates geometry plumbing, not novel-view realism.')
-    elif meta.viewpoint_warp is not None:
-        passed = False
-        messages.append('Zero rotation must skip viewpoint rendering entirely.')
-    position = scale = None
-    if meta.subject_mode != target.subject.mode:
-        passed = False
-        messages.append("Rendered subject mode does not match target mode.")
-    if meta.requested_viewport is not None and not boxes_match(meta.requested_viewport, target.framing.reference_viewport):
-        passed = False
-        messages.append("Requested viewport metadata does not match target.")
-    if meta.source_subject_bbox is not None:
-        source_box = meta.source_subject_bbox
-        if config.needs_reference_depth(viewpoint):
-            source_box = (meta.viewpoint_warp or {}).get('projected_subject_bbox')
-            if target.subject.mode == 'reposition':
-                messages.append('Natural subject projection omitted: background depth repaired; subject rendered independently.')
-        elif viewpoint.active and meta.reference_size is not None:
-            h,_,_ = rotation_homography(meta.reference_size,parameters)
-            source_box = warp_bbox(source_box,meta.reference_size,h)
-        projected = transform_bbox_by_viewport(source_box, meta.rendered_viewport) if source_box else None
-        if not boxes_match(projected, meta.natural_subject_bbox):
-            passed = False
-            messages.append("Natural subject bbox does not match source-to-viewport projection.")
-    if target.subject.mode == "follow_reference":
-        if meta.subject_transform_applied:
-            passed = False
-            messages.append("follow_reference must not apply an independent subject transform.")
-        if meta.source_subject_bbox is None:
-            messages.append("Subject detection skipped; only framing and image integrity are validated.")
-            if meta.natural_subject_bbox is not None or meta.rendered_subject_bbox is not None:
-                passed = False
-                messages.append("Subject bbox metadata lacks a source observation.")
-        elif not boxes_match(clip_bbox_to_canvas(meta.natural_subject_bbox), meta.rendered_subject_bbox):
-            passed = False
-            messages.append("Follow-reference subject does not match its natural visible bbox.")
-        else:
-            messages.append("Subject follows the reference viewport without independent editing.")
-    elif meta.rendered_subject_bbox is None:
-        passed = False
-        messages.append("Subject rendering is missing.")
+            messages.append(message)
+    framing = None
+    if meta.reference_size:
+        camera, viewport = camera_from_target(target, meta.reference_size,
+            (config.target_width, config.target_height), config.viewpoint_horizontal_fov_deg)
+        framing = sum(abs(a - b) for a, b in zip(viewport, meta.rendered_viewport)) / 4
+        require(framing <= config.framing_threshold, 'Target intrinsics viewport differs from intent.')
+        warp = meta.viewpoint_warp or {}
+        require(warp.get('camera_state') == camera.model_dump(mode='json'), 'Camera pose/intrinsics differ from intent.')
+        require(warp.get('parameters') == camera.warp_parameters().model_dump(), 'Camera parameters differ from intent.')
+        require(warp.get('renderer') == 'point_cloud' and warp.get('depth_used') is True
+                and warp.get('identity_copy_fast_path') is False, 'Point-cloud execution metadata missing.')
     else:
-        wanted, actual = target.subject.bbox, meta.rendered_subject_bbox
-        position = math.hypot((wanted[0] + wanted[2] - actual[0] - actual[2]) / 2,
-                              wanted[3] - actual[3])
-        expected_height = wanted[3] - wanted[1]
-        if meta.source_subject_bbox is not None and meta.reference_size is not None:
-            source = meta.source_subject_bbox
-            rw, rh = meta.reference_size
-            sw, sh = (source[2]-source[0])*rw, (source[3]-source[1])*rh
-            factor, _, _ = contain_subject((sw, sh), wanted, (config.target_width, config.target_height))
-            if not meta.subject_transform_applied:
-                expected = expected_subject_bbox(source, meta.reference_size, wanted,
-                                                  (config.target_width, config.target_height))
-                if not subject_is_noop(meta.natural_subject_bbox, expected,
-                                      config.subject_noop_position_threshold, config.subject_noop_scale_threshold):
-                    passed = False
-                    messages.append("Subject transform was skipped outside the no-op thresholds.")
-                if not boxes_match(clip_bbox_to_canvas(meta.natural_subject_bbox), actual):
-                    passed = False
-                    messages.append("No-op rendered bbox does not match natural geometry.")
-                messages.append("Independent subject editing skipped by no-op fast path.")
-            expected_height = sh*factor/config.target_height
-            if expected_height < wanted[3]-wanted[1]-1e-8:
-                messages.append("Subject height is limited by contain scaling within the target envelope.")
-            # Compare width in pixels with ratio-preserving width; permit raster rounding.
-            ratio_error_px = abs((actual[2]-actual[0])*config.target_width -
-                                 (actual[3]-actual[1])*config.target_height*sw/sh)
-            if ratio_error_px > 2 + 2*sw/sh:
-                passed = False
-                messages.append("Subject aspect ratio is distorted.")
-        else:
-            passed = False
-            messages.append("Source subject geometry is missing; contain scale cannot be verified.")
-        scale = abs(expected_height - (actual[3] - actual[1]))
-        tolerance_x, tolerance_y = 1/config.target_width, 1/config.target_height
-        if (actual[0] < wanted[0]-tolerance_x or actual[2] > wanted[2]+tolerance_x or
-                actual[1] < wanted[1]-tolerance_y or actual[3] > wanted[3]+tolerance_y):
-            passed = False
-            messages.append("Rendered subject exceeds target envelope.")
-        if position > config.subject_position_threshold:
-            passed = False
-            messages.append("Subject position error exceeds threshold.")
-        if scale > config.subject_scale_threshold:
-            passed = False
-            messages.append("Subject scale error exceeds threshold.")
+        require(False, 'Reference dimensions missing.')
+    require(meta.viewpoint_backend == 'depth_3d', 'Unexpected renderer backend.')
+    require(meta.camera_translation == target.viewpoint.translation, 'Camera translation differs from intent.')
+    require(meta.viewpoint_rotation == target.viewpoint.rotation, 'Camera rotation differs from intent.')
+    require(meta.viewpoint_applied == bool(target.viewpoint.active), 'Camera motion flag differs from intent.')
+    require(meta.requested_viewport == target.framing.reference_viewport and
+            meta.focal_scale == target.framing.focal_scale, 'Framing request differs from intent.')
+    require(not meta.subject_transform_applied and meta.subject_mode == 'follow_reference',
+            'Independent subject edit is forbidden.')
     try:
         with Image.open(path) as image:
-            image.load()
-            if image.size != (config.target_width, config.target_height):
-                passed = False
-                messages.append("Target sketch dimensions do not match configuration.")
-    except (OSError, ValueError) as exc:
-        passed = False
-        messages.append(f"Target sketch cannot be read: {exc}")
-    return SketchValidation(passed=passed, subject_position_error=position,
-                            subject_scale_error=scale, framing_error=framing, messages=messages)
+            pixels = np.asarray(image.convert('RGB'))
+            require(image.size == (config.target_width, config.target_height), 'Target dimensions mismatch.')
+        with Image.open(meta.valid_mask_path) as mask_image:
+            mask = np.asarray(mask_image.convert('L'))
+        require(mask.shape == pixels.shape[:2], 'Valid mask dimensions mismatch.')
+        require(bool(np.isin(mask, (0, 255)).all()), 'Valid mask must be binary.')
+        coverage = float((mask > 0).mean())
+        require(abs(coverage - meta.valid_pixel_ratio) < 1e-8 and
+                abs(1 - coverage - meta.hole_pixel_ratio) < 1e-8, 'Coverage metadata mismatch.')
+        require(coverage > 0, 'Camera view contains no observed geometry.')
+        if mask.shape == pixels.shape[:2]:
+            require(bool((pixels[mask == 0] == config.fill_color).all()), 'Unknown pixels must use constant fill.')
+    except (OSError, ValueError, TypeError) as exc:
+        require(False, f'Cannot read render artifacts: {exc}')
+    messages.append('Coverage validates projection plumbing, not photorealism; disocclusions remain blank.')
+    return SketchValidation(passed=passed, framing_error=framing, messages=messages)

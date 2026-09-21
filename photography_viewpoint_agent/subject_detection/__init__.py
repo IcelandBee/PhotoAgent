@@ -1,1 +1,0 @@
-"""Replaceable reference-person perception."""

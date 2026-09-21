@@ -19,7 +19,11 @@ python -m pytest -q
 
 输入：`video_path`、`current_frame`、`reference_frame`、`target_sketch`、完整 JSON `target_state`、`render_meta`。
 图片与视频字段为本地路径。可选 `session_id`、正整数 `step_id`、`video_url`，另需 `session_directory` 指定归档目录。
-下游 dataclass/TypedDict 保持独立，不导入上游 AgentState 或 Pydantic 模型。扩面、padding、人物 bbox、rotation 意图原样传递；depth_3d/depth_mesh 仅作为渲染诊断，不是 viewpoint.mode。Guidance graph 和直接 backend 调用均拒绝平移字段（包括0）及旧 depth mode。Prompt 禁止仅凭 viewport shift 推断物理平移，详见 [Transform 语义](TRANSFORM_SEMANTICS.md)。
+下游 dataclass/TypedDict 保持独立，不导入上游 AgentState 或 Pydantic 模型。当前目标统一由 Depth + Point Cloud 生成。
+viewpoint.mode=camera 接受 translation_x/y/z 和 yaw/pitch/roll；framing 接受 reference_viewport 与 focal_scale。
+平移采用 +x 右、+y 上、+z 前，单位为场景中位深度比例。人物固定，subject 仅 follow_reference，不接受 bbox/reposition。
+Prompt 使用真实相机运动意图，禁止仅凭 viewport shift 推断位移；所有 backend 结果在 graph 中拒绝独立人物动作。
+详见 [统一点云通路](POINTCLOUD_PIPELINE.md)。
 
 ```python
 import json

@@ -125,6 +125,8 @@ def build_guide_graph(backend=None, *, checkpointer=None):
                                 state["target_state"], state["render_meta"], state.get("video_url"))
         # Apply the same guard to custom/local backends as to VLM responses.
         result = GuideResult.from_dict(result.to_dict())
+        if any(action.actor == 'subject' for action in result.actions):
+            raise ValueError('Scene-fixed workflow forbids independent subject actions')
         return {"result": result.to_dict()}
 
     def persist_result(state: GuideState):

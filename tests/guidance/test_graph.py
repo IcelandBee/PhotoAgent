@@ -24,12 +24,12 @@ def test_phases(payload, phase, actor, action):
     assert not (folder / "crop.png").exists()
     assert engine.calls == 1
 
-@pytest.mark.parametrize("case", ["framing", "reposition", "expansion", "depth_3d", "depth_mesh"])
+@pytest.mark.parametrize("case", ["framing", "translation", "expansion", "depth_3d"])
 def test_target_intents_preserved(payload, case):
     actor, action = "lens", "zoom_out"
-    if case == "reposition":
-        payload["target_state"]["subject"] = {"mode": "reposition", "bbox": [.1, .2, .4, .9]}
-        actor, action = "subject", "subject_left"
+    if case == "translation":
+        payload['target_state']['viewpoint'] = {'mode': 'camera', 'translation_y': .05, 'pitch_deg': -8}
+        actor, action = 'camera', 'move_up'
     if case == "expansion":
         payload["target_state"]["framing"]["reference_viewport"] = [-.2, -.1, 1.2, 1.1]
         payload["render_meta"].update(padding=[10, 10, 10, 10], rendered_viewport=[-.2, -.1, 1.2, 1.1])
@@ -147,7 +147,7 @@ def test_invalid_backend_result_not_published(payload):
     assert not (Path(payload["session_directory"]) / "guidance/step_000001").exists()
 
 
-@pytest.mark.parametrize('field,value', [('translation_x', 0), ('translation_y', .03), ('translation_z', 0), ('mode', 'depth_mesh'), ('horizontal_fov_deg', 60)])
+@pytest.mark.parametrize('field,value', [('translation_x', .03), ('translation_y', .03), ('translation_z', .03), ('mode', 'depth_mesh'), ('horizontal_fov_deg', 60)])
 def test_legacy_viewpoint_rejected_before_backend(payload, field, value):
     payload['target_state']['viewpoint'] = {'mode': 'none', field: value}
     backend = MockBackend()
@@ -161,5 +161,16 @@ def test_direct_backend_rejects_legacy_translation(name):
     from video_guide.core import backends
     # Validation must precede image processing and network calls.
     backend = object.__new__(getattr(backends, name))
-    with pytest.raises(ValueError, match='orientation only'):
-        backend.analyze(None, None, None, None, {'viewpoint': {'translation_x': 0}}, {})
+    with pytest.raises(ValueError, match='mode=camera'):
+        backend.analyze(None, None, None, None, {'viewpoint': {'translation_x': .05}}, {})
+
+
+def test_scene_fixed_rejects_subject_intent_and_actions(payload):
+    payload['target_state']['subject'] = {'mode': 'reposition', 'bbox': [.1, .2, .4, .9]}
+    backend = MockBackend()
+    with pytest.raises(ValueError, match='follow_reference'):
+        build_guide_graph(backend).invoke(payload)
+    assert backend.calls == 0
+    payload['target_state']['subject'] = {'mode': 'follow_reference'}
+    with pytest.raises(ValueError, match='subject'):
+        build_guide_graph(MockBackend(actor='subject', action='subject_left')).invoke(payload)

@@ -56,10 +56,11 @@ class ConfigVideoTests(unittest.TestCase):
         prompt = blocks[0]["text"]
         self.assertIn(json.dumps(TARGET, ensure_ascii=False), prompt)
         self.assertIn(json.dumps(META, ensure_ascii=False), prompt)
-        self.assertIn("reposition", prompt)
-        self.assertNotIn("translation_x/y/z", prompt)
+        self.assertIn("follow_reference", prompt)
+        self.assertIn("translation_x/y/z", prompt)
         self.assertIn("禁止只根据 viewport shift", prompt)
-        self.assertIn("光心和摄影师站位不变", prompt)
+        self.assertIn("Point Cloud", prompt)
+        self.assertNotIn('"subject": [', prompt)
         self.assertEqual(result.evidence["video_transport"], "base64")
 
     def test_oversized_base64_rejected_before_request(self):

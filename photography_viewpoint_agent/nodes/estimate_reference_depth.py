@@ -5,13 +5,9 @@ import numpy as np
 import time
 
 
-def estimate_reference_depth(state, estimator, config, renderer=None):
-    if not config.needs_reference_depth(state['target_state'].viewpoint):
-        return {}
+def estimate_reference_depth(state, estimator, config):
     frame = state['reference_frame']
     output = Path(config.work_dir)
-    preflight=getattr(renderer,'preflight',None)
-    if preflight:preflight(config.viewpoint_backend)
     estimator=estimator if estimator is not None else create_depth_estimator(config,config.viewpoint_backend)
     started=time.perf_counter()
     observation = estimator.estimate(frame,output/'reference_depth.npy')

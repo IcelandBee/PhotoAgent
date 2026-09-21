@@ -35,7 +35,8 @@ class LocalBackend:
         # Synthetic padding/warps cannot establish a physically reached target.
         synthetic = (any(render_meta.get("padding", [])) or
                      target_state.get("viewpoint", {}).get("mode", "none") != "none" or
-                     target_state["subject"]["mode"] == "reposition")
+                     render_meta.get('viewpoint_backend') == 'depth_3d' or
+                     target_state.get('framing', {}).get('focal_scale', 1) != 1)
         target_reached = target_reached and not synthetic
         return GuideResult("reached" if target_reached else "uncertain", True, target_reached, [],
                            "已接近目标画面，可以拍摄。" if target_reached else "已接近参考视角；目标构图需要进一步语义判断。",
@@ -63,25 +64,26 @@ class VLMBackend:
     def analyze(self, current, reference, target_sketch, video, target_state, render_meta, video_url=None):
         validate_viewpoint_intent(target_state.get("viewpoint", {}))
         instruction = """你是实拍取景指导助手。三图依次为 Current Frame、Reference Frame、Target Sketch。
-Reference 是优秀历史真实视角；Target Sketch 是最终理想构图，可能扩面、人物重排或视角旋转，绝不假设它是任何图中的裁剪区域。
+Reference 是历史真实视角；Target Sketch 是整个场景经深度估计、点云和相机投影构造的目标视图。
 先判断 Current 是否接近 Reference 视角。未接近时 phase=navigation，只输出摄影师相机移动/朝向动作，禁止提前指导人物或变焦。
 接近后比较 Current 与 Target Sketch，结合 TargetState 和 RenderMeta 输出 composition 动作；达到目标时 reached 且 actions=[]。
 reference_reached 表示已进入参考视角附近、可以执行目标调整；不要把目标要求的后退/平移再次误判为需要返回原机位。
-subject.mode=reposition 明确表示人物目标站位/尺度改变，应结合 source/natural/rendered/target bbox 判断人物动作，不能转换成裁图。
-framing.reference_viewport = desired 2D framing：整幅 reference view 的平移、crop、zoom、扩面，人物与背景一起变化。它不是物理机位位移。
+subject.mode=follow_reference：人物固定在真实场景中，人物和背景一起参与点云投影；禁止要求人物独立移动或缩放。
+framing.reference_viewport 定义目标取景，focal_scale 定义相对焦距；两者统一进入 K_target，不是渲染后裁图。
 viewport 向右 shift 表示视窗取原参考坐标更右侧，图像内容向左；优先考虑 pan / framing adjustment，禁止只根据 viewport shift 推断 move_right 等 camera physical translation。
-reference_viewport 超出 [0,1] 或 padding>0 是合法扩面意图，可考虑 zoom_out/取景调整；只有当前图像提供独立证据时才建议实际后退。填充像素不是需要复现的真实物体。
-viewpoint yaw_deg/pitch_deg/roll_deg = explicit camera orientation change，光心和摄影师站位不变。正 yaw 向右转、正 pitch 抬头、正 roll 顺时针倾斜。
-subject.bbox = desired subject layout，最终画布中的人物位置/尺度 envelope；人物相对背景独立移动，不能用整体 viewport shift 替代。
-目标生成固定顺序是 Viewpoint Rotation → 2D Framing → Subject Layout。depth backend 只是旋转的渲染方法，不代表相机发生了平移。
-render_meta 描述实际渲染后的视窗、padding、subject bbox 和 viewpoint_warp。以当前图为准，不把视频末帧当作当前帧。
+reference_viewport 超出 [0,1] 是合法扩面意图。valid_mask 外是未知几何，固定色留白不是真实物体，不能当成拍摄目标。
+viewpoint.translation_x/y/z 是明确的相机位移：正 x 向右、正 y 向上、正 z 前进；单位是场景中位深度的比例，不是米。
+viewpoint yaw_deg/pitch_deg/roll_deg 是相机旋转：正 yaw 向右转、正 pitch 抬头、正 roll 顺时针倾斜。
+平移和旋转可组合，例如 translation_y=0.05、pitch_deg=-8 表示抬高机位并俯拍；不要忽略明确的位移意图。
+固定生成顺序是 RGB → Depth → Point Cloud → Camera R/t/K_target → Target Sketch，全部场景共同投影。
+render_meta 记录实际相机参数、内参和 valid/hole 比例。深度有误差，留白和边界拉伸不表示真实目标物体变化。
 方向左右均以摄影师当前画面为准。无法确定可执行动作时 uncertain，target_reached=false，actions=[]；不编造距离或焦距。
 只返回 JSON: {"phase":"navigation|composition|reached|uncertain","reference_reached":bool,"target_reached":bool,
-"actions":[{"actor":"camera|subject|lens","action":"允许的动作","magnitude":"small|medium|large或null","reason":"依据或null"}],
+"actions":[{"actor":"camera|lens","action":"允许的动作","magnitude":"small|medium|large或null","reason":"依据或null"}],
 "guidance":"中文实拍指引","confidence":0到1,"warnings":["不确定性"]}。
 navigation 两个 reached=false；composition reference_reached=true,target_reached=false；reached 两者=true。
 """
-        instruction += "\n允许的 actor/actions: " + json.dumps({k: sorted(v) for k, v in _ACTIONS.items()})
+        instruction += "\n允许的 actor/actions: " + json.dumps({k: sorted(v) for k, v in _ACTIONS.items() if k != 'subject'})
         instruction += "\nTargetState: " + json.dumps(target_state, ensure_ascii=False, allow_nan=False)
         instruction += "\nRenderMeta: " + json.dumps(render_meta, ensure_ascii=False, allow_nan=False)
         instruction += "\n本次输入包含完整视频。" if self.input_mode == "video" else "\n本次仅提供三张图和结构数据，不提供视频；请仅依据这些输入判断。"
@@ -123,6 +125,8 @@ navigation 两个 reached=false；composition reference_reached=true,target_reac
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         result = self.parse(raw)
+        if any(action.actor == 'subject' for action in result.actions):
+            raise ValueError('Scene-fixed workflow forbids independent subject actions')
         result.evidence.update(model=self.model, fps=self.fps, video_transport=("url" if video_url else "base64") if self.input_mode == "video" else "none", input_mode=self.input_mode, vlm_request_seconds=request_seconds)
         return result
 

@@ -9,7 +9,7 @@ def resolve_backend(config,mode):
         return 'precomputed'
     if config.depth_backend!='auto':
         return config.depth_backend
-    return 'depth_pro' if mode=='depth_mesh' else 'depth_anything'
+    return 'depth_anything'
 
 
 def create_depth_estimator(config,mode):

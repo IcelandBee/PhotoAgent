@@ -3,7 +3,6 @@ from .target import TargetState
 from .video import VideoMeta, FrameInfo
 from .rendering import RenderMeta
 from .validation import SketchValidation
-from .subject import SubjectObservation
 from .depth import DepthObservation
 
 
@@ -19,7 +18,6 @@ class AgentState(TypedDict, total=False):
     frames: list[FrameInfo]
     current_frame: FrameInfo
     reference_frame: FrameInfo
-    reference_subject: SubjectObservation
     reference_depth: DepthObservation
     target_state: TargetState
     target_sketch_path: str

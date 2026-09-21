@@ -41,16 +41,17 @@ def test_handoff_rejects_failed_generation(package_state, change):
         build_target_package({**package_state, **change})
 
 
-@pytest.mark.parametrize("mode", ["none", "homography", "depth_3d", "depth_mesh"])
+@pytest.mark.parametrize("mode", ["none", "rotation", "camera"])
 def test_full_viewpoint_metadata_survives(package_state, tmp_path, mode):
     target = package_state["target_state"].model_dump(mode="json")
-    target["subject"] = {"mode": "reposition", "bbox": [.1, .2, .5, .9]}
     target["framing"]["reference_viewport"] = [-.2, -.1, 1.2, 1.1]
-    target["viewpoint"]["mode"] = "none" if mode == "none" else "rotation"
+    target["viewpoint"]["mode"] = mode
+    target["viewpoint"]["translation_y"] = .05 if mode == 'camera' else 0
     target["viewpoint"]["yaw_deg"] = 0 if mode == "none" else 5
     package_state["target_state"] = TargetState.model_validate(target)
     package_state["render_meta"] = RenderMeta(rendered_viewport=(-.2, -.1, 1.2, 1.1),
-        padding=(10, 10, 10, 10), subject_mode="reposition", viewpoint_backend=mode, viewpoint_warp={"mode": mode, "custom": [1, 2, 3]})
+        camera_translation=(0, .05 if mode == 'camera' else 0, 0),
+        viewpoint_warp={"mode": mode, "custom": [1, 2, 3]})
     payload = to_guide_input(build_target_package(package_state), tmp_path / "session")
     assert payload["target_state"] == target
     assert payload["render_meta"]["viewpoint_warp"]["custom"] == [1, 2, 3]
@@ -71,13 +72,17 @@ def test_real_generation_to_guidance_and_locked_second_step(tmp_path):
     finally:
         writer.release()
     session = tmp_path / "session"
-    result = build_integrated_workflow(AgentConfig(target_width=64, target_height=48)).invoke({
+    from tests.test_pointcloud_pipeline import CountingDepth
+    estimator = CountingDepth()
+    result = build_integrated_workflow(AgentConfig(target_width=64, target_height=48), depth_estimator=estimator).invoke({
         "video_path": str(video), "session_directory": str(session),
         "manual_target_state": {"subject": {"mode": "follow_reference"}, "framing": {"reference_viewport": [0, 0, 1, 1]}},
         "session_id": "e2e", "step_id": 1,
     })
     json.dumps(result)
-    assert result["guidance"]["phase"] == "reached"
+    assert result["guidance"]["phase"] == "uncertain"
+    assert estimator.calls == 1
+    assert result['render_meta']['viewpoint_backend'] == 'depth_3d'
     assert Path(result["target_sketch"]).is_file()
     package = TargetPackage.model_validate(result["target_package"])
     target_files = {p.name: p.stat().st_mtime_ns for p in (session / "target").iterdir()}
@@ -144,9 +149,9 @@ def test_parent_checkpoint_resumes_guidance_without_regenerating(package_state, 
 def test_handoff_rejects_legacy_translation(package_state, tmp_path, field):
     package = build_target_package(package_state)
     data = package_state['target_state'].model_dump()
-    data['viewpoint'][field] = 0
-    with pytest.raises(ValueError, match=field):
+    data['viewpoint'][field] = .05
+    with pytest.raises(ValueError, match='mode=camera'):
         build_target_package({**package_state, 'target_state': data})
     invalid = package.model_copy(update={'target_state': data})
-    with pytest.raises(ValueError, match=field):
+    with pytest.raises(ValueError, match='mode=camera'):
         to_guide_input(invalid, tmp_path / 'session')

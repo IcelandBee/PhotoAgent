@@ -15,7 +15,7 @@ class DepthProEstimator:
         try:
             from transformers import DepthProImageProcessor,DepthProForDepthEstimation
         except ImportError as exc:
-            raise RuntimeError('Depth Pro requires the optional requirements-mesh.txt (Transformers 4.57.6 tested)') from exc
+            raise RuntimeError('Depth Pro requires Transformers with DepthPro support (4.57.6 tested); see docs/POINTCLOUD_PIPELINE.md') from exc
         started=time.perf_counter()
         if self.model is None:
             self.processor=DepthProImageProcessor.from_pretrained(self.model_name)

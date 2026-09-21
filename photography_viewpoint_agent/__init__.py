@@ -1,1 +1,1 @@
-"""Photography Viewpoint Agent V0.3: explicit follow-reference and reposition modes."""
+"""Photography Viewpoint Agent: scene-fixed depth and point-cloud rendering."""

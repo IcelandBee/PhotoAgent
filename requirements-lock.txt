@@ -62,9 +62,6 @@ torchvision==0.29.0
 truststore==0.10.4
 typing-extensions==4.16.0
 typing-inspection==0.4.4
-ultralytics==8.4.152
-ultralytics-platform==0.1.41
-ultralytics-thop==2.1.6
 urllib3==2.7.0
 uuid-utils==0.17.1
 websockets==16.1.1
