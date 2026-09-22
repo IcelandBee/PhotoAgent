@@ -44,7 +44,8 @@ def build_workflow(config: AgentConfig | None = None, *,
     planner = planner if planner is not None else ManualCompositionPlanner()
     renderer = renderer if renderer is not None else TargetSketchRenderer(
         config.target_width, config.target_height, fill_color=config.fill_color, debug=config.debug,
-        splat_radius=config.splat_radius, viewpoint_horizontal_fov_deg=config.viewpoint_horizontal_fov_deg)
+        splat_radius=config.splat_radius, viewpoint_horizontal_fov_deg=config.viewpoint_horizontal_fov_deg,
+        renderer=config.point_renderer)
     nodes = {
         "load_video": load_video,
         "extract_frames": partial(extract_frames, config=config),

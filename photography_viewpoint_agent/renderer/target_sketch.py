@@ -11,11 +11,11 @@ from photography_viewpoint_agent.tools.plan_validator import validate_plan
 
 class TargetSketchRenderer:
     def __init__(self, width=1280, height=720, fill_color=(128, 128, 128), debug=False,
-                 splat_radius=1, viewpoint_horizontal_fov_deg=60):
+                 splat_radius=1, viewpoint_horizontal_fov_deg=60, renderer='bilinear'):
         self.size = (width, height)
         self.fill_color, self.debug = fill_color, debug
         self.viewpoint_fov = viewpoint_horizontal_fov_deg
-        self.renderer = DepthRenderer(splat_radius)
+        self.renderer = DepthRenderer(splat_radius, renderer=renderer)
 
     def render(self, reference_frame, reference_subject, target_state, output_path, *, reference_depth=None):
         target = validate_plan(target_state)

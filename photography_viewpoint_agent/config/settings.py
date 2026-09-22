@@ -21,6 +21,7 @@ class AgentConfig(Schema):
     depth_device: str = 'cpu'
     depth_debug: bool = False
     splat_radius: int = Field(default=1, ge=0, le=3, strict=True)
+    point_renderer: Literal['bilinear', 'nearest_z'] = 'bilinear'
     debug: bool = False
     framing_threshold: float = Field(default=0.03, ge=0)
     work_dir: str = './workdir'

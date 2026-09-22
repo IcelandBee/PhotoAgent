@@ -79,7 +79,19 @@ def test_workflow_always_estimates_once_and_projects(tmp_path, intent):
     assert 'reference_subject' not in result and 'detect_reference_subject' not in graph.get_graph().nodes
     warp = result['render_meta'].viewpoint_warp
     assert warp['renderer'] == 'point_cloud' and not warp['identity_copy_fast_path']
+    assert warp['point_renderer'] == 'bilinear'
     assert Path(result['target_sketch_path']).suffix == '.png'
+
+
+def test_workflow_can_select_nearest_for_debug(tmp_path):
+    video = tmp_path / 'input.avi'
+    make_video(video)
+    config = AgentConfig(target_width=64, target_height=48, frame_sample_interval=3,
+                         point_renderer='nearest_z', work_dir=str(tmp_path / 'run'))
+    result = build_workflow(config, depth_estimator=CountingDepth()).invoke(
+        {'video_path': str(video), 'manual_target_state': {}})
+    assert result.get('error') is None
+    assert result['render_meta'].viewpoint_warp['point_renderer'] == 'nearest_z'
 
 
 def test_depth_failure_does_not_fallback(tmp_path):
@@ -139,7 +151,7 @@ def test_identity_uses_projection_and_nearest_surface_occlusion():
     image = Image.fromarray(pixels)
     depth = np.ones((48, 64))
     state = CameraState(source_intrinsics=k, target_intrinsics=k)
-    result = DepthRenderer(0).render(image, state, depth)
+    result = DepthRenderer(0, renderer='nearest_z').render(image, state, depth)
     np.testing.assert_array_equal(pixels, np.asarray(result.image))
     assert not result.metadata['identity_copy_fast_path']
     # Two source rays collapse into one pixel under narrow focal scaling;
@@ -147,7 +159,7 @@ def test_identity_uses_projection_and_nearest_surface_occlusion():
     depth[:] = 0; depth[24, 32] = 1; depth[24, 33] = 2
     pixels[24, 32] = [255, 0, 0]; pixels[24, 33] = [0, 0, 255]
     small = k.model_copy(update={'fx': k.fx * .1, 'fy': k.fy * .1})
-    result = DepthRenderer(0).render(Image.fromarray(pixels),
+    result = DepthRenderer(0, renderer='nearest_z').render(Image.fromarray(pixels),
         CameraState(source_intrinsics=k, target_intrinsics=small), depth)
     np.testing.assert_array_equal(np.asarray(result.image)[24, 32], [255, 0, 0])
 

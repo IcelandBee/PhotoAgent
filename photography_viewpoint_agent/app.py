@@ -33,6 +33,8 @@ def main(argv=None) -> int:
     parser.add_argument('--depth-device',default='cpu')
     parser.add_argument('--depth-debug',action='store_true')
     parser.add_argument('--splat-radius',type=int,default=1)
+    parser.add_argument('--point-renderer',choices=['bilinear','nearest_z'],default='bilinear',
+                        help='Point-cloud rasterizer; nearest_z is for regression/debug')
     parser.add_argument("--debug", action="store_true", help="Save projected depth and depth visualization")
     parser.add_argument("--fill-color", type=int, nargs=3, metavar=("R", "G", "B"),
                         default=(128, 128, 128), help="Expansion fill color, RGB 0..255")

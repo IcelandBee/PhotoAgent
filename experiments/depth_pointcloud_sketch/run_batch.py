@@ -147,7 +147,7 @@ def run_batch(input_dir, output_dir, *, presets_path=DEFAULT_PRESETS, max_images
     selected = files[:max_images] if max_images else files
     output.mkdir(parents=True, exist_ok=False)
     estimator = depth_estimator or create_depth_estimator(config, 'depth_3d')
-    renderer = DepthRenderer(config.splat_radius)
+    renderer = DepthRenderer(config.splat_radius, renderer='nearest_z')
     summary = {'research_only': True, 'input_dir': str(input_dir), 'output_dir': str(output),
                'discovered_image_count': len(files), 'input_image_count': len(selected),
                'preset_count': len(presets), 'presets': presets, 'coordinate_convention': CONVENTION,

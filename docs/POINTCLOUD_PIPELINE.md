@@ -9,8 +9,10 @@ Integrated workflow 继续使用 TargetPackage 交接，下游验证接受同一
 深度默认使用现有 Depth Anything V2 Small；现有转换将相对逆深度映射到正 Z，再中位归一化。
 这不是度量深度恢复。Depth Pro 与 precomputed 输入仍可用，metric Z 只在渲染副本中除以中位数，原始深度保留。
 
-camera_rendering/depth_renderer.py 统一采用已测试的 explicit_intrinsics_point_splat_adapter：
-源 K 反投影出彩色点 → R(X-C) → K_target 投影 → 三遍 nearest-Z / distance / source-index 决胜。
+camera_rendering/depth_renderer.py 默认采用深度感知双线性点云渲染：
+源 K 反投影出彩色点 → R(X-C) → K_target 投影 → 浮点坐标的 2×2 邻域加权投射。
+每个目标像素先求最近深度，再按 abs(z-z_min) <= max(1e-6, 0.01*z_min) 过滤贡献并计算加权 RGB。
+nearest-Z 保留为显式 regression/debug 选项（--point-renderer nearest_z），其 3×3 candidates 只生成一次、供三遍计算复用。
 geometry.py 提取了原 rotation_matrix 和 mesh transform 的共享数学，不再依赖旧 rasterizer。
 移除了单 K 快路、identity 图像复制和 Homography dispatch，因此任意 target K 和目标尺寸均走同一投影实现。
 
@@ -51,6 +53,6 @@ Guidance 的参考图特征匹配仍可用 homography 评估对齐，它不生�
 ## 已知局限
 
 单图不能恢复遮挡区和原视野外几何。人物轮廓、细杆、头发、透明物体和深度跃变处可能有孔洞或拉伸。
-默认半径 1 的 3×3 最近深度 splat 在 identity 时也可能选择邻近较浅像素；这是实际渲染而非复制检查。
-半径 0 可用于严格 identity 验证；扩大输出尺寸时固定 splat 半径可能导致采样空洞。
+nearest-Z 半径 1 的 3×3 splat 在 identity 时也可能选择邻近较浅像素；半径 0 可用于严格 identity 对照。
+双线性投射的 footprint 固定为 2×2，扩大输出尺寸时仍可能产生采样空洞。
 模型推理可用 CUDA，点云实现目前仍为 CPU；没有在本次迁移中引入补全或质量优化。

@@ -62,7 +62,7 @@ class CameraRenderer:
         depth, depth_metadata = self._depth(image)
         if self._geometry is None or self._geometry.source_intrinsics != state.source_intrinsics:
             self._geometry = prepare_point_cloud(image, depth, state.source_intrinsics)
-        result = DepthRenderer(self.config.splat_radius).render(
+        result = DepthRenderer(self.config.splat_radius, renderer=self.config.point_renderer).render(
             image, state, depth, self.config.fill_color, geometry=self._geometry)
         result.metadata.update(depth_metadata)
         r = state.rotation_matrix()
